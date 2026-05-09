@@ -884,6 +884,23 @@ func SearchContent(c *gin.Context) {
 func RecommendContent(c *gin.Context) {
 	var contents []models.Content
 
+	countStr := c.Query("count")
+	if countStr == "" {
+		utils.RespondWithError(c, http.StatusBadRequest, "count参数必填")
+		return
+	}
+
+	count, err := strconv.Atoi(countStr)
+	if err != nil || count < 1 {
+		utils.RespondWithError(c, http.StatusBadRequest, "count参数无效，必须是大于0的整数")
+		return
+	}
+
+	if count > MaxRecommendCount {
+		count = MaxRecommendCount
+	}
+
+	var total int64
 	query := utils.DB.Model(&models.Content{}).Where("audit_status = ?", models.AuditStatusApproved)
 
 	if tag := c.Query("tag"); tag != "" {
@@ -891,87 +908,84 @@ func RecommendContent(c *gin.Context) {
 		for _, t := range tags {
 			t = strings.TrimSpace(t)
 			if t != "" {
-				query = query.Where("JSON_CONTAINS(tags, ?)", "\""+t+"\"")
+				safeTag := sanitizeSearchInput(t)
+				query = query.Where("JSON_CONTAINS(tags, ?)", "\""+safeTag+"\"")
 			}
 		}
 	}
 
-	countStr := c.Query("count")
-	if countStr == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"code":    400,
-			"message": "count 参数必填",
-			"data":    nil,
+	query.Count(&total)
+	if total == 0 {
+		c.JSON(http.StatusOK, gin.H{
+			"code":    200,
+			"message": "获取推荐成功",
+			"data": gin.H{
+				"list":  []gin.H{},
+				"count": 0,
+			},
 		})
 		return
 	}
 
-	count, err := strconv.Atoi(countStr)
-	if err != nil || count < 1 {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"code":    400,
-			"message": "count 参数无效，必须是大于0的整数",
-			"data":    nil,
-		})
-		return
+	if int(total) <= count {
+		query = query.Preload("User").Order("created_at DESC").Limit(count)
+	} else {
+		var maxID, minID uint
+		utils.DB.Model(&models.Content{}).Select("MAX(id)", "MIN(id)").Row().Scan(&maxID, &minID)
+		if maxID > minID {
+			randomOffset := uint(time.Now().UnixNano() % int64(maxID-minID))
+			startID := minID + randomOffset
+			subQuery := utils.DB.Model(&models.Content{}).
+				Where("id >= ? AND audit_status = ?", startID, models.AuditStatusApproved).
+				Order("id ASC").Limit(count)
+
+			if tag := c.Query("tag"); tag != "" {
+				tags := strings.Split(tag, ",")
+				for _, t := range tags {
+					t = strings.TrimSpace(t)
+					if t != "" {
+						safeTag := sanitizeSearchInput(t)
+						subQuery = subQuery.Where("JSON_CONTAINS(tags, ?)", "\""+safeTag+"\"")
+					}
+				}
+			}
+
+			if err := subQuery.Preload("User").Find(&contents).Error; err != nil {
+				utils.RespondWithError(c, http.StatusInternalServerError, "获取推荐失败")
+				return
+			}
+
+			if len(contents) < count {
+				var remaining []models.Content
+				remainingQuery := utils.DB.Model(&models.Content{}).
+					Where("id < ? AND audit_status = ?", startID, models.AuditStatusApproved)
+
+				if tag := c.Query("tag"); tag != "" {
+					tags := strings.Split(tag, ",")
+					for _, t := range tags {
+						t = strings.TrimSpace(t)
+						if t != "" {
+							safeTag := sanitizeSearchInput(t)
+							remainingQuery = remainingQuery.Where("JSON_CONTAINS(tags, ?)", "\""+safeTag+"\"")
+						}
+					}
+				}
+
+				remainingQuery.Preload("User").Order("id DESC").Limit(count - len(contents)).Find(&remaining)
+				contents = append(contents, remaining...)
+			}
+		} else {
+			query = query.Preload("User").Order("created_at DESC").Limit(count)
+		}
 	}
 
-	if count > 50 {
-		count = 50
-	}
-
-	query = query.Preload("User").Preload("BigTag").Preload("SmallTag").
-		Order("RAND()").Limit(count)
-
-	if err := query.Find(&contents).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"code":    500,
-			"message": "获取推荐失败",
-			"data":    nil,
-		})
-		return
+	if len(contents) == 0 {
+		query.Preload("User").Find(&contents)
 	}
 
 	results := make([]gin.H, 0, len(contents))
 	for _, content := range contents {
-		result := gin.H{
-			"ID":          content.ID,
-			"Title":       content.Title,
-			"Type":        content.Type,
-			"Content":     content.Content,
-			"FilePath":    content.FilePath,
-			"FileSize":    content.FileSize,
-			"UserID":      content.UserID,
-			"Tags":        content.Tags,
-			"AuditStatus": content.AuditStatus,
-			"CreatedAt":   content.CreatedAt,
-			"UpdatedAt":   content.UpdatedAt,
-			"image":       "",
-			"video":       "",
-			"User":        gin.H{"ID": 0, "Username": "", "IsAdmin": false},
-		}
-
-		if content.Type == models.ContentTypeImage && content.FilePath != "" {
-			thumbPath := getThumbnailPath(c, content.FilePath)
-			result["image"] = "http://" + c.Request.Host + thumbPath
-		}
-
-		if content.Type == models.ContentTypeVideo && content.FilePath != "" {
-			result["video"] = "http://" + c.Request.Host + "/uploads/" + content.FilePath
-			if content.ThumbPath != "" {
-				thumbPath := getThumbnailPath(c, content.ThumbPath)
-				result["image"] = "http://" + c.Request.Host + thumbPath
-			}
-		}
-
-		if content.User.ID > 0 {
-			result["User"] = gin.H{
-				"ID":       content.User.ID,
-				"Username": content.User.Username,
-				"IsAdmin":  content.User.IsAdmin,
-			}
-		}
-
+		result := buildContentResponse(c, content)
 		results = append(results, result)
 	}
 
