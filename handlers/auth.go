@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"net/http"
+	"strings"
 	"time"
 	"xiaoquan-backend/models"
 	"xiaoquan-backend/utils"
@@ -134,7 +135,7 @@ func Login(c *gin.Context) {
 		utils.SessionStore[sessionID] = user.ID
 	}
 
-	c.SetCookie("session_id", sessionID, CookieMaxAge, "/", "", true, false)
+	c.SetCookie("session_id", sessionID, CookieMaxAge, "/", "", shouldUseSecureCookie(c), false)
 
 	c.JSON(http.StatusOK, gin.H{
 		"code":    200,
@@ -160,7 +161,7 @@ func Logout(c *gin.Context) {
 			delete(utils.SessionStore, sessionID)
 		}
 	}
-	c.SetCookie("session_id", "", -1, "/", "", true, true)
+	c.SetCookie("session_id", "", -1, "/", "", shouldUseSecureCookie(c), true)
 	c.JSON(http.StatusOK, gin.H{
 		"code":    200,
 		"message": "登出成功",
@@ -200,6 +201,16 @@ func GetMe(c *gin.Context) {
 			"is_admin": u.IsAdmin,
 		},
 	})
+}
+
+// shouldUseSecureCookie 判断是否应该使用Secure Cookie
+// localhost开发环境不使用Secure，以便在HTTP下正常工作
+func shouldUseSecureCookie(c *gin.Context) bool {
+	host := c.Request.Host
+	if strings.HasPrefix(host, "localhost") || strings.HasPrefix(host, "127.0.0.1") {
+		return false
+	}
+	return true
 }
 
 // generateSessionID 生成加密安全的会话ID
