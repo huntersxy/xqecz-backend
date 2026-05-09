@@ -135,7 +135,7 @@ func Login(c *gin.Context) {
 		utils.SessionStore[sessionID] = user.ID
 	}
 
-	c.SetCookie("session_id", sessionID, CookieMaxAge, "/", "", shouldUseSecureCookie(c), false)
+	c.SetCookie("session_id", sessionID, CookieMaxAge, "/", "", false, false)
 
 	c.JSON(http.StatusOK, gin.H{
 		"code":    200,
@@ -161,7 +161,7 @@ func Logout(c *gin.Context) {
 			delete(utils.SessionStore, sessionID)
 		}
 	}
-	c.SetCookie("session_id", "", -1, "/", "", shouldUseSecureCookie(c), true)
+	c.SetCookie("session_id", "", -1, "/", "", false, false)
 	c.JSON(http.StatusOK, gin.H{
 		"code":    200,
 		"message": "登出成功",
