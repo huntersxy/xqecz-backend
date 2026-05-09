@@ -2,13 +2,13 @@ package utils
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"time"
 
 	"xiaoquan-backend/config"
 
+	"github.com/bytedance/sonic"
 	"github.com/go-redis/redis/v8"
 )
 
@@ -46,7 +46,7 @@ func GetCache(key string) (string, error) {
 }
 
 func SetCacheJSON(key string, value interface{}, expiration time.Duration) error {
-	data, err := json.Marshal(value)
+	data, err := sonic.Marshal(value)
 	if err != nil {
 		return err
 	}
@@ -58,7 +58,7 @@ func GetCacheJSON(key string, value interface{}) error {
 	if err != nil {
 		return err
 	}
-	return json.Unmarshal([]byte(data), value)
+	return sonic.Unmarshal([]byte(data), value)
 }
 
 func DelCache(key string) error {

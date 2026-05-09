@@ -2,6 +2,7 @@ package utils
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -68,4 +69,32 @@ func GenerateImageThumbnail(originalPath, filename string) (string, error) {
 	}
 
 	return thumbFilename, nil
+}
+
+func GenerateVideoThumbnailAsync(videoPath, filename string, callback func(string, error)) {
+	go func() {
+		thumbFilename, err := GenerateVideoThumbnail(videoPath, filename)
+		if err != nil {
+			log.Printf("[缩略图] 异步生成视频缩略图失败: %v", err)
+		} else {
+			log.Printf("[缩略图] 异步生成视频缩略图成功: %s", thumbFilename)
+		}
+		if callback != nil {
+			callback(thumbFilename, err)
+		}
+	}()
+}
+
+func GenerateImageThumbnailAsync(originalPath, filename string, callback func(string, error)) {
+	go func() {
+		thumbFilename, err := GenerateImageThumbnail(originalPath, filename)
+		if err != nil {
+			log.Printf("[缩略图] 异步生成图片缩略图失败: %v", err)
+		} else {
+			log.Printf("[缩略图] 异步生成图片缩略图成功: %s", thumbFilename)
+		}
+		if callback != nil {
+			callback(thumbFilename, err)
+		}
+	}()
 }

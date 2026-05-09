@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"net/http"
+	"time"
 	"xiaoquan-backend/models"
 	"xiaoquan-backend/utils"
 	"github.com/gin-gonic/gin"
@@ -14,6 +15,7 @@ import (
 const (
 	SessionIDLength = 32
 	CookieMaxAge    = 3600 * 24 * 7
+	SessionDuration = 24 * time.Hour
 )
 
 type RegisterRequest struct {
@@ -26,6 +28,8 @@ type LoginRequest struct {
 	Password string `json:"password" binding:"required"`
 }
 
+// Register 处理用户注册请求
+// 验证用户名和密码格式，检查用户名唯一性，使用bcrypt加密密码后创建用户
 func Register(c *gin.Context) {
 	var req RegisterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -95,6 +99,8 @@ func Register(c *gin.Context) {
 	})
 }
 
+// Login 处理用户登录请求
+// 验证用户名密码，生成安全会话ID，优先使用Redis存储会话，降级到内存存储
 func Login(c *gin.Context) {
 	var req LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -122,9 +128,13 @@ func Login(c *gin.Context) {
 	}
 
 	sessionID := generateSessionID()
-	utils.SessionStore[sessionID] = user.ID
+	if utils.RedisClient != nil {
+		utils.SetSession(sessionID, user.ID)
+	} else {
+		utils.SessionStore[sessionID] = user.ID
+	}
 
-	c.SetCookie("session_id", sessionID, CookieMaxAge, "/", "", false, false)
+	c.SetCookie("session_id", sessionID, CookieMaxAge, "/", "", true, false)
 
 	c.JSON(http.StatusOK, gin.H{
 		"code":    200,
@@ -139,12 +149,18 @@ func Login(c *gin.Context) {
 	})
 }
 
+// Logout 处理用户登出请求
+// 从会话存储中删除会话，使Cookie失效
 func Logout(c *gin.Context) {
 	sessionID, err := c.Cookie("session_id")
 	if err == nil {
-		delete(utils.SessionStore, sessionID)
+		if utils.RedisClient != nil {
+			utils.DeleteSession(sessionID)
+		} else {
+			delete(utils.SessionStore, sessionID)
+		}
 	}
-	c.SetCookie("session_id", "", -1, "/", "", false, true)
+	c.SetCookie("session_id", "", -1, "/", "", true, true)
 	c.JSON(http.StatusOK, gin.H{
 		"code":    200,
 		"message": "登出成功",
@@ -152,6 +168,8 @@ func Logout(c *gin.Context) {
 	})
 }
 
+// GetMe 获取当前登录用户信息
+// 从请求上下文获取已通过AuthMiddleware验证的用户信息
 func GetMe(c *gin.Context) {
 	user, exists := c.Get("user")
 	if !exists {
@@ -184,6 +202,8 @@ func GetMe(c *gin.Context) {
 	})
 }
 
+// generateSessionID 生成加密安全的会话ID
+// 使用crypto/rand生成32字节随机数据，转换为64字符hex字符串
 func generateSessionID() string {
 	b := make([]byte, SessionIDLength)
 	_, err := rand.Read(b)
