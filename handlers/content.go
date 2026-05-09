@@ -301,43 +301,7 @@ func GetContentList(c *gin.Context) {
 
 	results := make([]gin.H, 0, len(contents))
 	for _, content := range contents {
-		result := gin.H{
-			"ID":          content.ID,
-			"Title":       content.Title,
-			"Type":        content.Type,
-			"Content":     content.Content,
-			"FilePath":    content.FilePath,
-			"FileSize":    content.FileSize,
-			"UserID":      content.UserID,
-			"Tags":        content.Tags,
-			"AuditStatus": content.AuditStatus,
-			"CreatedAt":   content.CreatedAt,
-			"UpdatedAt":   content.UpdatedAt,
-			"image":       "",
-			"video":       "",
-		}
-
-		if content.Type == models.ContentTypeImage && content.FilePath != "" {
-			thumbPath := getThumbnailPath(c, content.FilePath)
-			result["image"] = "http://" + c.Request.Host + thumbPath
-		}
-
-		if content.Type == models.ContentTypeVideo && content.FilePath != "" {
-			result["video"] = "http://" + c.Request.Host + "/uploads/" + content.FilePath
-			if content.ThumbPath != "" {
-				thumbPath := getThumbnailPath(c, content.ThumbPath)
-				result["image"] = "http://" + c.Request.Host + thumbPath
-			}
-		}
-
-		if content.User.ID > 0 {
-			result["User"] = gin.H{
-				"ID":       content.User.ID,
-				"Username": content.User.Username,
-				"IsAdmin":  content.User.IsAdmin,
-			}
-		}
-
+		result := buildContentResponse(c, content)
 		results = append(results, result)
 	}
 
@@ -351,7 +315,7 @@ func GetContentList(c *gin.Context) {
 			PageSize:  pageSize,
 			TotalPage: totalPage,
 		}
-		go utils.SetCacheJSON(cacheKey, cacheData, 5*time.Minute)
+		go utils.SetCacheJSON(cacheKey, cacheData, CacheDuration5Min)
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -818,53 +782,13 @@ func SearchContent(c *gin.Context) {
 		Order("created_at DESC").Limit(pageSize).Offset(offset)
 
 	if err := query.Find(&contents).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"code":    500,
-			"message": "搜索失败",
-			"data":    nil,
-		})
+		utils.RespondWithError(c, http.StatusInternalServerError, "搜索失败")
 		return
 	}
 
 	results := make([]gin.H, 0, len(contents))
 	for _, content := range contents {
-		result := gin.H{
-			"ID":          content.ID,
-			"Title":       content.Title,
-			"Type":        content.Type,
-			"Content":     content.Content,
-			"FilePath":    content.FilePath,
-			"FileSize":    content.FileSize,
-			"UserID":      content.UserID,
-			"Tags":        content.Tags,
-			"AuditStatus": content.AuditStatus,
-			"CreatedAt":   content.CreatedAt,
-			"UpdatedAt":   content.UpdatedAt,
-			"image":       "",
-			"video":       "",
-		}
-
-		if content.Type == models.ContentTypeImage && content.FilePath != "" {
-			thumbPath := getThumbnailPath(c, content.FilePath)
-			result["image"] = "http://" + c.Request.Host + thumbPath
-		}
-
-		if content.Type == models.ContentTypeVideo && content.FilePath != "" {
-			result["video"] = "http://" + c.Request.Host + "/uploads/" + content.FilePath
-			if content.ThumbPath != "" {
-				thumbPath := getThumbnailPath(c, content.ThumbPath)
-				result["image"] = "http://" + c.Request.Host + thumbPath
-			}
-		}
-
-		if content.User.ID > 0 {
-			result["User"] = gin.H{
-				"ID":       content.User.ID,
-				"Username": content.User.Username,
-				"IsAdmin":  content.User.IsAdmin,
-			}
-		}
-
+		result := buildContentResponse(c, content)
 		results = append(results, result)
 	}
 
