@@ -29,11 +29,7 @@ type LoginRequest struct {
 func Register(c *gin.Context) {
 	var req RegisterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"code":    400,
-			"message": err.Error(),
-			"data":    nil,
-		})
+		utils.RespondWithError(c, http.StatusBadRequest, "请求参数格式错误")
 		return
 	}
 
@@ -102,11 +98,7 @@ func Register(c *gin.Context) {
 func Login(c *gin.Context) {
 	var req LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"code":    400,
-			"message": err.Error(),
-			"data":    nil,
-		})
+		utils.RespondWithError(c, http.StatusBadRequest, "请求参数格式错误")
 		return
 	}
 

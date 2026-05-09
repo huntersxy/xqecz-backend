@@ -90,11 +90,7 @@ func UploadContent(c *gin.Context) {
 
 	var req UploadRequest
 	if err := c.ShouldBind(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"code":    400,
-			"message": err.Error(),
-			"data":    nil,
-		})
+		utils.RespondWithError(c, http.StatusBadRequest, "请求参数格式错误")
 		return
 	}
 
@@ -180,12 +176,8 @@ func UploadContent(c *gin.Context) {
 	}
 
 	if err := utils.DB.Create(content).Error; err != nil {
-		log.Printf("Error creating content: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"code":    500,
-			"message": "failed to create content: " + err.Error(),
-			"data":    nil,
-		})
+		log.Printf("[错误] 创建内容失败: user_id=%d, error=%v", currentUser.ID, err)
+		utils.RespondWithError(c, http.StatusInternalServerError, "创建内容失败，请稍后重试")
 		return
 	}
 
