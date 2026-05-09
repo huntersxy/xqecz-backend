@@ -208,7 +208,17 @@ func GetContentList(c *gin.Context) {
 	var contents []models.Content
 	var total int64
 
-	cacheKey := "content_list:" + c.Request.URL.Query().Encode()
+	cacheParams := map[string]string{
+		"audit_status": c.Query("audit_status"),
+		"tag":          c.Query("tag"),
+		"type":         c.Query("type"),
+		"keyword":      c.Query("keyword"),
+		"sort_by":      c.DefaultQuery("sort_by", "created_at"),
+		"order":        c.DefaultQuery("order", "desc"),
+		"page":         c.DefaultQuery("page", "1"),
+		"page_size":    c.DefaultQuery("page_size", fmt.Sprintf("%d", DefaultPageSize)),
+	}
+	cacheKey := generateSortedCacheKey("content_list:", cacheParams)
 
 	if utils.RedisClient != nil {
 		var cacheData ContentListCache
@@ -243,7 +253,8 @@ func GetContentList(c *gin.Context) {
 		for _, t := range tags {
 			t = strings.TrimSpace(t)
 			if t != "" {
-				query = query.Where("JSON_CONTAINS(tags, ?)", "\""+t+"\"")
+				safeTag := sanitizeSearchInput(t)
+				query = query.Where("JSON_CONTAINS(tags, ?)", "\""+safeTag+"\"")
 			}
 		}
 	}
@@ -253,7 +264,8 @@ func GetContentList(c *gin.Context) {
 	}
 
 	if keyword := c.Query("keyword"); keyword != "" {
-		query = query.Where("title LIKE ? OR content LIKE ?", "%"+keyword+"%", "%"+keyword+"%")
+		safeKeyword := sanitizeSearchInput(keyword)
+		query = query.Where("title LIKE ? OR content LIKE ?", "%"+safeKeyword+"%", "%"+safeKeyword+"%")
 	}
 
 	sortBy := c.DefaultQuery("sort_by", "created_at")
