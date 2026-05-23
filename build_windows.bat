@@ -1,19 +1,18 @@
 @echo off
-REM 小泉动漫后端 - Windows编译脚本
+REM usage: build_windows        production (stripped, no swagger)
+REM        build_windows dev    development (with swagger)
 
-echo =========================================
-echo 小泉动漫后端 - Windows构建
-echo =========================================
-
-echo 编译中...
-go build -o xiaoquan-backend.exe
+if "%1"=="dev" (
+    echo [DEV BUILD] with Swagger
+    go build -o xiaoquan-backend.exe
+) else (
+    echo [PROD BUILD] stripped, no Swagger
+    go build -ldflags="-s -w" -tags noswagger -o xiaoquan-backend.exe
+)
 
 if %ERRORLEVEL% EQU 0 (
-    echo =========================================
-    echo ✓ 编译成功！
-    echo 可执行文件: xiaoquan-backend.exe
-    echo =========================================
+    echo [OK] xiaoquan-backend.exe
 ) else (
-    echo ✗ 编译失败！
+    echo [FAILED]
     exit /b 1
 )

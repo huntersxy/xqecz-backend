@@ -6,6 +6,12 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+type SwaggerResponse struct {
+	Code    int         `json:"code" example:"200"`
+	Message string      `json:"message" example:"操作成功"`
+	Data    interface{} `json:"data"`
+}
+
 type ErrorResponse struct {
 	Code    int         `json:"code"`
 	Message string      `json:"message"`

@@ -56,5 +56,8 @@ func AutoMigrate() error {
 		&models.Comment{},
 		&models.CommentReport{},
 		&models.AuditLog{},
+		&models.Poll{},
+		&models.PollVote{},
+		&models.Claim{},
 	)
 }

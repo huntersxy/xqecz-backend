@@ -1,9 +1,20 @@
 package utils
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"html"
 	"strings"
 )
+
+func GenerateRandomString(n int) string {
+	b := make([]byte, n)
+	_, err := rand.Read(b)
+	if err != nil {
+		return ""
+	}
+	return base64.URLEncoding.EncodeToString(b)[:n]
+}
 
 func SanitizeHTML(input string) string {
 	if input == "" {

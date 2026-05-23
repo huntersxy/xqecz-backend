@@ -12,6 +12,7 @@ const (
 	ContentTypeVideo ContentType = "video"
 	ContentTypeImage ContentType = "image"
 	ContentTypeText  ContentType = "text"
+	ContentTypeLink  ContentType = "link"
 )
 
 type AuditStatus string
@@ -41,6 +42,9 @@ type Content struct {
 	FilePath    string         `gorm:"size:500" json:"file_path,omitempty"`
 	FileSize    int64          `json:"file_size,omitempty"`
 	ThumbPath   string         `gorm:"size:500" json:"thumb_path,omitempty"`
+	Url         string         `gorm:"size:500" json:"url,omitempty"`
+	Platform    string         `gorm:"size:20" json:"platform,omitempty"`
+	ViewCount   int64          `gorm:"default:0" json:"view_count"`
 	UserID      uint           `gorm:"not null;index" json:"user_id"`
 	User        User           `json:"user,omitempty"`
 	BigTagID    *uint          `gorm:"index" json:"big_tag_id,omitempty"`
@@ -89,4 +93,50 @@ type AuditLog struct {
 	Status    AuditStatus `gorm:"size:20;not null" json:"status"`
 	Remark    string      `gorm:"type:text" json:"remark,omitempty"`
 	CreatedAt time.Time   `json:"created_at"`
+}
+
+type Poll struct {
+	ID          uint           `gorm:"primaryKey" json:"id"`
+	Title       string         `gorm:"size:200;not null" json:"title"`
+	Description string         `gorm:"type:text" json:"description,omitempty"`
+	Options     []string       `gorm:"type:text;serializer:json" json:"options"`
+	VoteCount   int64          `gorm:"default:0" json:"vote_count"`
+	UserID      uint           `gorm:"not null;index" json:"user_id"`
+	User        User           `json:"user,omitempty"`
+	CreatedAt   time.Time      `json:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at"`
+	DeletedAt   gorm.DeletedAt `gorm:"index" json:"-"`
+}
+
+type PollVote struct {
+	ID           uint           `gorm:"primaryKey" json:"id"`
+	PollID       uint           `gorm:"not null;index" json:"poll_id"`
+	Poll         Poll           `json:"poll,omitempty"`
+	UserID       *uint          `gorm:"index" json:"user_id,omitempty"`
+	User         User           `json:"user,omitempty"`
+	VisitorID    string         `gorm:"size:64;index" json:"visitor_id,omitempty"`
+	OptionIndex  int            `gorm:"not null" json:"option_index"`
+	CreatedAt    time.Time      `json:"created_at"`
+}
+
+type ClaimStatus string
+
+const (
+	ClaimStatusPending   ClaimStatus = "pending"
+	ClaimStatusApproved  ClaimStatus = "approved"
+	ClaimStatusRejected  ClaimStatus = "rejected"
+)
+
+type Claim struct {
+	ID          uint           `gorm:"primaryKey" json:"id"`
+	ContentID   uint           `gorm:"not null;index" json:"content_id"`
+	Content     Content        `json:"content,omitempty"`
+	UserID      uint           `gorm:"not null;index" json:"user_id"`
+	User        User           `json:"user,omitempty"`
+	Reason      string         `gorm:"type:text" json:"reason,omitempty"`
+	Status      ClaimStatus    `gorm:"size:20;default:pending;index" json:"status"`
+	ApprovedBy  *uint          `gorm:"index" json:"approved_by,omitempty"`
+	Remark      string         `gorm:"type:text" json:"remark,omitempty"`
+	CreatedAt   time.Time      `json:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at"`
 }

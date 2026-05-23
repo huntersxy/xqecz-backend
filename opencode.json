@@ -1,0 +1,15 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "swagger": {
+      "type": "local",
+      "command": ["npx", "-y", "swagger-mcp@latest"],
+      "enabled": true,
+      "environment": {
+        "API_BASE_URL": "http://localhost:8080",
+        "API_DOCS_URL": "http://localhost:8080/swagger/doc.json"
+      },
+      "timeout": 30000
+    }
+  }
+}

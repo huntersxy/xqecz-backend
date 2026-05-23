@@ -22,8 +22,8 @@ func AuthMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		userID, exists := utils.SessionStore[sessionID]
-		if !exists {
+		userID, err := utils.GetSession(sessionID)
+		if err != nil {
 			c.JSON(http.StatusUnauthorized, gin.H{
 				"code":    401,
 				"message": "会话已过期",
@@ -34,14 +34,19 @@ func AuthMiddleware() gin.HandlerFunc {
 		}
 
 		var user models.User
-		if err := utils.DB.First(&user, userID).Error; err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"code":    401,
-				"message": "用户不存在",
-				"data":    nil,
-			})
-			c.Abort()
-			return
+		if cached, err := utils.GetUserInfoCache(userID); err == nil {
+			user = *cached
+		} else {
+			if err := utils.DB.First(&user, userID).Error; err != nil {
+				c.JSON(http.StatusUnauthorized, gin.H{
+					"code":    401,
+					"message": "用户不存在",
+					"data":    nil,
+				})
+				c.Abort()
+				return
+			}
+			utils.SetUserInfoCache(&user)
 		}
 
 		c.Set("user", user)

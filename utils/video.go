@@ -32,11 +32,11 @@ func GetFFmpegVersion() (string, error) {
 }
 
 func GenerateVideoThumbnail(videoPath, filename string) (string, error) {
-	thumbExt := ".jpg"
+	thumbExt := ".webp"
 	thumbFilename := filename[:len(filename)-len(filepath.Ext(filename))] + "_thumb" + thumbExt
-	thumbPath := filepath.Join(config.AppConfig.Server.UploadDir, thumbFilename)
+	thumbPath := filepath.Join(config.AppConfig.Server.ThumbnailDir, thumbFilename)
 
-	cmd := exec.Command("ffmpeg", "-i", videoPath, "-vf", "select=eq(n\\,9)", "-vframes", "1", "-q:v", "2", thumbPath)
+	cmd := exec.Command("ffmpeg", "-i", videoPath, "-vf", "select=eq(n\\,9)", "-vframes", "1", "-c:v", "libwebp", "-quality", "60", "-y", thumbPath)
 	if err := cmd.Run(); err != nil {
 		return "", fmt.Errorf("failed to generate thumbnail: %v", err)
 	}
@@ -45,8 +45,8 @@ func GenerateVideoThumbnail(videoPath, filename string) (string, error) {
 }
 
 func DeleteVideoThumbnail(filename string) error {
-	thumbFilename := filename[:len(filename)-len(filepath.Ext(filename))] + "_thumb.jpg"
-	thumbPath := filepath.Join(config.AppConfig.Server.UploadDir, thumbFilename)
+	thumbFilename := filename[:len(filename)-len(filepath.Ext(filename))] + "_thumb.webp"
+	thumbPath := filepath.Join(config.AppConfig.Server.ThumbnailDir, thumbFilename)
 
 	if err := os.Remove(thumbPath); err != nil {
 		return fmt.Errorf("failed to delete thumbnail: %v", err)

@@ -6,6 +6,7 @@ import (
 	"math/rand"
 	"net/http"
 	"time"
+	"xiaoquan-backend/config"
 	"xiaoquan-backend/models"
 	"xiaoquan-backend/utils"
 	"github.com/gin-gonic/gin"
@@ -25,15 +26,26 @@ func generateRandomPassword(length int) string {
 	return string(b)
 }
 
+// InitAdmin 初始化管理员
+// @Summary      初始化管理员
+// @Description  首次运行时创建管理员账号，密码在服务器日志中查看（仅当无管理员时可用）
+// @Tags         认证
+// @Produce      json
+// @Success      200 {object} utils.SwaggerResponse{data=object{admin_id=uint,username=string}}
+// @Failure      403 {object} utils.SwaggerResponse
+// @Router       /auth/init-admin [post]
 func InitAdmin(c *gin.Context) {
+	if !config.AppConfig.InitAdmin {
+		utils.RespondWithError(c, http.StatusForbidden, "未启用初始化管理员功能，请在配置中设置 init_admin: true")
+		return
+	}
+
 	var count int64
 	utils.DB.Model(&models.User{}).Where("is_admin = ?", true).Count(&count)
 	if count > 0 {
-		c.JSON(http.StatusForbidden, gin.H{
-			"code":    403,
-			"message": "管理员已存在",
-			"data":    nil,
-		})
+		config.AppConfig.InitAdmin = false
+		config.SaveConfig("./config/config.yaml")
+		utils.RespondWithError(c, http.StatusForbidden, "管理员已存在，已自动关闭初始化开关")
 		return
 	}
 
@@ -71,12 +83,15 @@ func InitAdmin(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"code":    200,
-		"message": "管理员创建成功，请查看后端日志获取密码",
-		"data": gin.H{
-			"admin_id": admin.ID,
-			"username": username,
-		},
+	config.AppConfig.InitAdmin = false
+	if err := config.SaveConfig("./config/config.yaml"); err != nil {
+		log.Printf("[管理员] 保存配置失败: %v", err)
+	} else {
+		log.Println("[管理员] 初始化完成，已关闭 init_admin 开关")
+	}
+
+	utils.RespondWithSuccess(c, gin.H{
+		"admin_id": admin.ID,
+		"username": username,
 	})
 }

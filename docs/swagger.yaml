@@ -1,0 +1,1919 @@
+basePath: /api
+definitions:
+  handlers.LoginRequest:
+    properties:
+      password:
+        type: string
+      username:
+        type: string
+    required:
+    - password
+    - username
+    type: object
+  handlers.RegisterRequest:
+    properties:
+      password:
+        type: string
+      username:
+        type: string
+    required:
+    - password
+    - username
+    type: object
+  models.AuditStatus:
+    enum:
+    - pending
+    - approved
+    - rejected
+    type: string
+    x-enum-varnames:
+    - AuditStatusPending
+    - AuditStatusApproved
+    - AuditStatusRejected
+  models.Claim:
+    properties:
+      approved_by:
+        type: integer
+      content:
+        $ref: '#/definitions/models.Content'
+      content_id:
+        type: integer
+      created_at:
+        type: string
+      id:
+        type: integer
+      reason:
+        type: string
+      remark:
+        type: string
+      status:
+        $ref: '#/definitions/models.ClaimStatus'
+      updated_at:
+        type: string
+      user:
+        $ref: '#/definitions/models.User'
+      user_id:
+        type: integer
+    type: object
+  models.ClaimStatus:
+    enum:
+    - pending
+    - approved
+    - rejected
+    type: string
+    x-enum-varnames:
+    - ClaimStatusPending
+    - ClaimStatusApproved
+    - ClaimStatusRejected
+  models.Comment:
+    properties:
+      content:
+        $ref: '#/definitions/models.Content'
+      content_id:
+        type: integer
+      created_at:
+        type: string
+      id:
+        type: integer
+      is_banned:
+        type: boolean
+      parent:
+        $ref: '#/definitions/models.Comment'
+      parent_id:
+        type: integer
+      replies:
+        items:
+          $ref: '#/definitions/models.Comment'
+        type: array
+      text:
+        type: string
+      updated_at:
+        type: string
+      user:
+        $ref: '#/definitions/models.User'
+      user_id:
+        type: integer
+    type: object
+  models.CommentReport:
+    properties:
+      comment:
+        $ref: '#/definitions/models.Comment'
+      comment_id:
+        type: integer
+      created_at:
+        type: string
+      handled:
+        type: boolean
+      id:
+        type: integer
+      reason:
+        type: string
+      user:
+        $ref: '#/definitions/models.User'
+      user_id:
+        type: integer
+    type: object
+  models.Content:
+    properties:
+      audit_status:
+        $ref: '#/definitions/models.AuditStatus'
+      big_tag_id:
+        type: integer
+      content:
+        type: string
+      created_at:
+        type: string
+      file_path:
+        type: string
+      file_size:
+        type: integer
+      id:
+        type: integer
+      platform:
+        type: string
+      small_tag_id:
+        type: integer
+      tags:
+        items:
+          type: string
+        type: array
+      thumb_path:
+        type: string
+      title:
+        type: string
+      type:
+        $ref: '#/definitions/models.ContentType'
+      updated_at:
+        type: string
+      url:
+        type: string
+      user:
+        $ref: '#/definitions/models.User'
+      user_id:
+        type: integer
+      view_count:
+        type: integer
+    type: object
+  models.ContentType:
+    enum:
+    - video
+    - image
+    - text
+    - link
+    type: string
+    x-enum-varnames:
+    - ContentTypeVideo
+    - ContentTypeImage
+    - ContentTypeText
+    - ContentTypeLink
+  models.Poll:
+    properties:
+      created_at:
+        type: string
+      description:
+        type: string
+      id:
+        type: integer
+      options:
+        items:
+          type: string
+        type: array
+      title:
+        type: string
+      updated_at:
+        type: string
+      user:
+        $ref: '#/definitions/models.User'
+      user_id:
+        type: integer
+      vote_count:
+        type: integer
+    type: object
+  models.User:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: integer
+      is_admin:
+        type: boolean
+      is_banned:
+        type: boolean
+      updated_at:
+        type: string
+      username:
+        type: string
+    type: object
+  utils.SwaggerResponse:
+    properties:
+      code:
+        example: 200
+        type: integer
+      data: {}
+      message:
+        example: 操作成功
+        type: string
+    type: object
+host: localhost:8080
+info:
+  contact: {}
+  description: 小泉动漫后端API接口 - 支持内容管理、评论、投票、用户认证、站外资源等
+  title: 小泉动漫 API
+  version: "1.0"
+paths:
+  /admin/audit/{id}:
+    post:
+      consumes:
+      - application/json
+      description: 管理员审核内容（通过/拒绝）
+      parameters:
+      - description: 内容ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 审核信息
+        in: body
+        name: body
+        required: true
+        schema:
+          properties:
+            admin_id:
+              type: integer
+            remark:
+              type: string
+            status:
+              type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.SwaggerResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.Content'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.SwaggerResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.SwaggerResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.SwaggerResponse'
+      security:
+      - SessionAuth: []
+      summary: 审核内容
+      tags:
+      - 管理
+  /admin/claims:
+    get:
+      description: 管理员查看内容认领申请列表
+      parameters:
+      - description: 状态筛选
+        enum:
+        - pending
+        - approved
+        - rejected
+        in: query
+        name: status
+        type: string
+      - description: 内容ID筛选
+        in: query
+        name: content_id
+        type: integer
+      - default: 1
+        description: 页码
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: 每页数量
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.SwaggerResponse'
+            - properties:
+                data:
+                  properties:
+                    list:
+                      items:
+                        $ref: '#/definitions/models.Claim'
+                      type: array
+                    total:
+                      type: integer
+                  type: object
+              type: object
+      security:
+      - SessionAuth: []
+      summary: 认领申请列表
+      tags:
+      - 管理
+  /admin/claims/{id}/handle:
+    post:
+      consumes:
+      - application/json
+      description: 管理员通过或拒绝内容认领申请
+      parameters:
+      - description: 认领申请ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 操作(approve/reject)和备注
+        in: body
+        name: body
+        required: true
+        schema:
+          properties:
+            action:
+              type: string
+            remark:
+              type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.SwaggerResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.Claim'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.SwaggerResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.SwaggerResponse'
+      security:
+      - SessionAuth: []
+      summary: 处理认领申请
+      tags:
+      - 管理
+  /admin/comments/reports:
+    get:
+      description: 管理员查看评论举报列表
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.SwaggerResponse'
+      security:
+      - SessionAuth: []
+      summary: 举报列表
+      tags:
+      - 管理
+  /admin/comments/reports/{id}/handle:
+    post:
+      description: 管理员处理评论举报，标记为已处理
+      parameters:
+      - description: 举报ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.SwaggerResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.CommentReport'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.SwaggerResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.SwaggerResponse'
+      security:
+      - SessionAuth: []
+      summary: 处理举报
+      tags:
+      - 管理
+  /admin/content/{id}/author:
+    put:
+      consumes:
+      - application/json
+      description: 管理员将内容转移给其他用户
+      parameters:
+      - description: 内容ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 目标用户ID
+        in: body
+        name: body
+        required: true
+        schema:
+          properties:
+            user_id:
+              type: integer
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.SwaggerResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.SwaggerResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.SwaggerResponse'
+      security:
+      - SessionAuth: []
+      summary: 更新内容作者
+      tags:
+      - 管理
+  /admin/content/all:
+    get:
+      description: 管理员查看所有内容列表（支持筛选）
+      parameters:
+      - default: 1
+        description: 页码
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: 每页数量
+        in: query
+        name: page_size
+        type: integer
+      - description: 标签筛选
+        in: query
+        name: tag
+        type: string
+      - description: 内容类型
+        enum:
+        - video
+        - image
+        - text
+        - link
+        in: query
+        name: type
+        type: string
+      - description: 审核状态
+        enum:
+        - approved
+        - pending
+        - rejected
+        in: query
+        name: audit_status
+        type: string
+      - description: 关键词搜索
+        in: query
+        name: keyword
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.SwaggerResponse'
+            - properties:
+                data:
+                  properties:
+                    list:
+                      items:
+                        $ref: '#/definitions/models.Content'
+                      type: array
+                    page:
+                      type: integer
+                    page_size:
+                      type: integer
+                    total:
+                      type: integer
+                    total_page:
+                      type: integer
+                  type: object
+              type: object
+      security:
+      - SessionAuth: []
+      summary: 所有内容
+      tags:
+      - 管理
+  /admin/files/clean:
+    delete:
+      description: 管理员清理未被任何内容引用的上传文件和缩略图
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.SwaggerResponse'
+            - properties:
+                data:
+                  properties:
+                    deleted_count:
+                      type: integer
+                    deleted_files:
+                      items:
+                        type: string
+                      type: array
+                  type: object
+              type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.SwaggerResponse'
+      security:
+      - SessionAuth: []
+      summary: 清理孤立文件
+      tags:
+      - 管理
+  /admin/pending:
+    get:
+      description: 管理员查看待审核内容列表
+      parameters:
+      - default: 1
+        description: 页码
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: 每页数量
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.SwaggerResponse'
+            - properties:
+                data:
+                  properties:
+                    list:
+                      items:
+                        $ref: '#/definitions/models.Content'
+                      type: array
+                    page:
+                      type: integer
+                    page_size:
+                      type: integer
+                    total:
+                      type: integer
+                    total_page:
+                      type: integer
+                  type: object
+              type: object
+      security:
+      - SessionAuth: []
+      summary: 待审核内容
+      tags:
+      - 管理
+  /admin/users:
+    get:
+      description: 管理员查看所有用户
+      parameters:
+      - default: 1
+        description: 页码
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: 每页数量
+        in: query
+        name: page_size
+        type: integer
+      - description: 用户名搜索
+        in: query
+        name: keyword
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.SwaggerResponse'
+            - properties:
+                data:
+                  properties:
+                    list:
+                      items:
+                        $ref: '#/definitions/models.User'
+                      type: array
+                    total:
+                      type: integer
+                  type: object
+              type: object
+      security:
+      - SessionAuth: []
+      summary: 用户列表
+      tags:
+      - 管理
+  /admin/users/{id}:
+    delete:
+      description: 删除用户及其所有内容
+      parameters:
+      - description: 用户ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.SwaggerResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.SwaggerResponse'
+      security:
+      - SessionAuth: []
+      summary: 删除用户
+      tags:
+      - 管理
+  /admin/users/{id}/ban:
+    put:
+      consumes:
+      - application/json
+      description: 封禁或解封指定用户（不能封禁管理员）
+      parameters:
+      - description: 用户ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 封禁信息
+        in: body
+        name: body
+        required: true
+        schema:
+          properties:
+            is_banned:
+              type: boolean
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.SwaggerResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.User'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.SwaggerResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/utils.SwaggerResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.SwaggerResponse'
+      security:
+      - SessionAuth: []
+      summary: 封禁/解封用户
+      tags:
+      - 管理
+  /admin/users/{id}/role:
+    put:
+      consumes:
+      - application/json
+      description: 设置/取消管理员
+      parameters:
+      - description: 用户ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 角色信息
+        in: body
+        name: body
+        required: true
+        schema:
+          properties:
+            is_admin:
+              type: boolean
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.SwaggerResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.User'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.SwaggerResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.SwaggerResponse'
+      security:
+      - SessionAuth: []
+      summary: 更新用户角色
+      tags:
+      - 管理
+  /auth/init-admin:
+    post:
+      description: 首次运行时创建管理员账号，密码在服务器日志中查看（仅当无管理员时可用）
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.SwaggerResponse'
+            - properties:
+                data:
+                  properties:
+                    admin_id:
+                      type: integer
+                    username:
+                      type: string
+                  type: object
+              type: object
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/utils.SwaggerResponse'
+      summary: 初始化管理员
+      tags:
+      - 认证
+  /auth/login:
+    post:
+      consumes:
+      - application/json
+      description: 使用用户名密码登录，成功返回session cookie
+      parameters:
+      - description: 登录信息
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.SwaggerResponse'
+            - properties:
+                data:
+                  properties:
+                    user:
+                      properties:
+                        id:
+                          type: integer
+                        is_admin:
+                          type: boolean
+                        username:
+                          type: string
+                      type: object
+                  type: object
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.SwaggerResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.SwaggerResponse'
+      summary: 用户登录
+      tags:
+      - 认证
+  /auth/logout:
+    post:
+      description: 清除session，退出登录
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.SwaggerResponse'
+      summary: 用户登出
+      tags:
+      - 认证
+  /auth/me:
+    get:
+      description: 获取当前登录用户的信息
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.SwaggerResponse'
+            - properties:
+                data:
+                  properties:
+                    id:
+                      type: integer
+                    is_admin:
+                      type: boolean
+                    username:
+                      type: string
+                  type: object
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.SwaggerResponse'
+      security:
+      - SessionAuth: []
+      summary: 当前用户信息
+      tags:
+      - 认证
+  /auth/register:
+    post:
+      consumes:
+      - application/json
+      description: 注册新用户账号
+      parameters:
+      - description: 注册信息
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.RegisterRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.SwaggerResponse'
+            - properties:
+                data:
+                  properties:
+                    user_id:
+                      type: integer
+                  type: object
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.SwaggerResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/utils.SwaggerResponse'
+      summary: 用户注册
+      tags:
+      - 认证
+  /bot/upload:
+    post:
+      consumes:
+      - multipart/form-data
+      description: Bot通过Token认证上传内容（自动审核通过）
+      parameters:
+      - description: Bot Token
+        in: header
+        name: X-Bot-Token
+        type: string
+      - description: 标题
+        in: header
+        name: X-Bot-Title
+        type: string
+      - description: 链接URL
+        in: header
+        name: X-Bot-Url
+        type: string
+      - description: 标签（逗号分隔）
+        in: header
+        name: X-Bot-Tags
+        type: string
+      - description: 文件
+        in: formData
+        name: file
+        type: file
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.SwaggerResponse'
+            - properties:
+                data:
+                  properties:
+                    id:
+                      type: integer
+                    type:
+                      type: string
+                  type: object
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.SwaggerResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.SwaggerResponse'
+      summary: Bot上传
+      tags:
+      - Bot
+  /comment/{id}:
+    delete:
+      description: 作者或管理员可删除评论
+      parameters:
+      - description: 评论ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.SwaggerResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.SwaggerResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/utils.SwaggerResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.SwaggerResponse'
+      security:
+      - SessionAuth: []
+      summary: 删除评论
+      tags:
+      - 评论
+  /comment/add:
+    post:
+      consumes:
+      - multipart/form-data
+      description: 对已审核通过的内容添加评论，支持回复其他评论
+      parameters:
+      - description: 内容ID
+        in: formData
+        name: content_id
+        required: true
+        type: integer
+      - description: 评论内容
+        in: formData
+        name: text
+        required: true
+        type: string
+      - description: 父评论ID（回复时使用）
+        in: formData
+        name: parent_id
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.SwaggerResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.Comment'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.SwaggerResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.SwaggerResponse'
+      security:
+      - SessionAuth: []
+      summary: 添加评论
+      tags:
+      - 评论
+  /comment/count/{content_id}:
+    get:
+      description: 获取指定内容的评论总数
+      parameters:
+      - description: 内容ID
+        in: path
+        name: content_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.SwaggerResponse'
+            - properties:
+                data:
+                  properties:
+                    count:
+                      type: integer
+                  type: object
+              type: object
+      summary: 评论数量
+      tags:
+      - 评论
+  /comment/list/{content_id}:
+    get:
+      description: 获取指定内容的评论列表（嵌套回复，分页）
+      parameters:
+      - description: 内容ID
+        in: path
+        name: content_id
+        required: true
+        type: integer
+      - default: 1
+        description: 页码
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: 每页数量
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.SwaggerResponse'
+            - properties:
+                data:
+                  properties:
+                    list:
+                      items:
+                        $ref: '#/definitions/models.Comment'
+                      type: array
+                    page:
+                      type: integer
+                    page_size:
+                      type: integer
+                    total:
+                      type: integer
+                    total_page:
+                      type: integer
+                  type: object
+              type: object
+      summary: 评论列表
+      tags:
+      - 评论
+  /comment/report:
+    post:
+      consumes:
+      - multipart/form-data
+      description: 举报违规评论
+      parameters:
+      - description: 评论ID
+        in: formData
+        name: comment_id
+        required: true
+        type: integer
+      - description: 举报原因
+        in: formData
+        name: reason
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.SwaggerResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.SwaggerResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.SwaggerResponse'
+      security:
+      - SessionAuth: []
+      summary: 举报评论
+      tags:
+      - 评论
+  /content/{content_id}/claim:
+    post:
+      consumes:
+      - application/json
+      description: 提交内容作者认领申请（不能认领自己的内容）
+      parameters:
+      - description: 内容ID
+        in: path
+        name: content_id
+        required: true
+        type: string
+      - description: 认领理由
+        in: body
+        name: body
+        required: true
+        schema:
+          properties:
+            reason:
+              type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.SwaggerResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.Claim'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.SwaggerResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.SwaggerResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.SwaggerResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/utils.SwaggerResponse'
+      security:
+      - SessionAuth: []
+      summary: 内容认领
+      tags:
+      - 内容管理
+  /content/{id}:
+    delete:
+      description: 删除内容及关联文件和评论。作者或管理员可操作。
+      parameters:
+      - description: 内容ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.SwaggerResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.SwaggerResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/utils.SwaggerResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.SwaggerResponse'
+      security:
+      - SessionAuth: []
+      summary: 删除内容
+      tags:
+      - 内容管理
+    get:
+      description: 获取单个内容的详细信息，含用户信息和封面/视频URL
+      parameters:
+      - description: 内容ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.SwaggerResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.Content'
+              type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.SwaggerResponse'
+      summary: 内容详情
+      tags:
+      - 内容管理
+    put:
+      consumes:
+      - multipart/form-data
+      description: 更新内容信息。作者或管理员可操作，更新后重新进入审核。link类型修改url若为视频链接会自动重新抓取封面和标题。
+      parameters:
+      - description: 内容ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 新标题
+        in: formData
+        name: title
+        type: string
+      - description: 新文字内容
+        in: formData
+        name: content
+        type: string
+      - description: 新链接
+        in: formData
+        name: url
+        type: string
+      - collectionFormat: csv
+        description: 新标签列表
+        in: formData
+        items:
+          type: string
+        name: tags
+        type: array
+      - description: 新文件
+        in: formData
+        name: file
+        type: file
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.SwaggerResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.Content'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.SwaggerResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.SwaggerResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/utils.SwaggerResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.SwaggerResponse'
+      security:
+      - SessionAuth: []
+      summary: 更新内容
+      tags:
+      - 内容管理
+  /content/list:
+    get:
+      description: 获取公开内容列表，支持类型/标签/关键词筛选和排序
+      parameters:
+      - default: 1
+        description: 页码
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: 每页数量
+        in: query
+        maximum: 100
+        name: page_size
+        type: integer
+      - description: 内容类型
+        enum:
+        - video
+        - image
+        - text
+        - link
+        in: query
+        name: type
+        type: string
+      - description: 标签筛选
+        in: query
+        name: tag
+        type: string
+      - description: 关键词搜索
+        in: query
+        name: keyword
+        type: string
+      - default: approved
+        description: 审核状态
+        enum:
+        - approved
+        - pending
+        - rejected
+        - all
+        in: query
+        name: audit_status
+        type: string
+      - default: created_at
+        description: 排序字段
+        enum:
+        - created_at
+        - updated_at
+        - id
+        in: query
+        name: sort_by
+        type: string
+      - default: desc
+        description: 排序方向
+        enum:
+        - asc
+        - desc
+        in: query
+        name: order
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.SwaggerResponse'
+            - properties:
+                data:
+                  properties:
+                    list:
+                      items:
+                        $ref: '#/definitions/models.Content'
+                      type: array
+                    page:
+                      type: integer
+                    page_size:
+                      type: integer
+                    total:
+                      type: integer
+                    total_page:
+                      type: integer
+                  type: object
+              type: object
+      summary: 获取内容列表
+      tags:
+      - 内容管理
+  /content/my:
+    get:
+      description: 获取当前登录用户的内容列表
+      parameters:
+      - default: 1
+        description: 页码
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: 每页数量
+        in: query
+        maximum: 100
+        name: page_size
+        type: integer
+      - description: 内容类型
+        enum:
+        - video
+        - image
+        - text
+        - link
+        in: query
+        name: type
+        type: string
+      - description: 审核状态
+        enum:
+        - approved
+        - pending
+        - rejected
+        in: query
+        name: audit_status
+        type: string
+      - description: 大标签ID
+        in: query
+        name: big_tag_id
+        type: integer
+      - description: 小标签ID
+        in: query
+        name: small_tag_id
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.SwaggerResponse'
+            - properties:
+                data:
+                  properties:
+                    list:
+                      items:
+                        $ref: '#/definitions/models.Content'
+                      type: array
+                    page:
+                      type: integer
+                    page_size:
+                      type: integer
+                    total:
+                      type: integer
+                    total_page:
+                      type: integer
+                  type: object
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.SwaggerResponse'
+      security:
+      - SessionAuth: []
+      summary: 我的内容
+      tags:
+      - 内容管理
+  /content/recommend:
+    get:
+      description: 获取推荐内容列表（基于Redis热度排序，降级为时间倒序）
+      parameters:
+      - default: 10
+        description: 返回数量（1-50）
+        in: query
+        name: count
+        type: integer
+      - default: 1
+        description: 页码
+        in: query
+        name: page
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.SwaggerResponse'
+            - properties:
+                data:
+                  properties:
+                    count:
+                      type: integer
+                    list:
+                      items:
+                        $ref: '#/definitions/models.Content'
+                      type: array
+                  type: object
+              type: object
+      summary: 推荐内容
+      tags:
+      - 内容管理
+  /content/search:
+    get:
+      description: 按关键词搜索已审核通过的内容（模糊匹配标题和内容字段）
+      parameters:
+      - description: 搜索关键词
+        in: query
+        name: keyword
+        required: true
+        type: string
+      - default: 1
+        description: 页码
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: 每页数量
+        in: query
+        maximum: 100
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.SwaggerResponse'
+            - properties:
+                data:
+                  properties:
+                    list:
+                      items:
+                        $ref: '#/definitions/models.Content'
+                      type: array
+                    page:
+                      type: integer
+                    page_size:
+                      type: integer
+                    total:
+                      type: integer
+                    total_page:
+                      type: integer
+                  type: object
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.SwaggerResponse'
+      summary: 搜索内容
+      tags:
+      - 内容管理
+  /content/tags:
+    get:
+      description: 获取系统中所有已使用的标签
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.SwaggerResponse'
+            - properties:
+                data:
+                  items:
+                    type: string
+                  type: array
+              type: object
+      summary: 所有标签
+      tags:
+      - 内容管理
+  /content/upload:
+    post:
+      consumes:
+      - multipart/form-data
+      description: 上传新内容。支持类型：video(视频)、image(图片)、text(文字)、link(链接，B站/抖音/YouTube视频链接自动抓取封面和标题)
+      parameters:
+      - description: 标题（1-200字符）
+        in: formData
+        name: title
+        required: true
+        type: string
+      - description: 内容类型
+        enum:
+        - video
+        - image
+        - text
+        - link
+        in: formData
+        name: type
+        required: true
+        type: string
+      - description: 文字内容（type=text时有效）
+        in: formData
+        name: content
+        type: string
+      - description: 外部链接（type=link时必填，B站/抖音/YouTube视频链接会自动抓取封面和标题）
+        in: formData
+        name: url
+        type: string
+      - collectionFormat: csv
+        description: 标签列表
+        in: formData
+        items:
+          type: string
+        name: tags
+        type: array
+      - description: 文件（type=video或image时必填）
+        in: formData
+        name: file
+        type: file
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.SwaggerResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.Content'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.SwaggerResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.SwaggerResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/utils.SwaggerResponse'
+      security:
+      - SessionAuth: []
+      summary: 上传内容
+      tags:
+      - 内容管理
+  /content/upload-image:
+    post:
+      consumes:
+      - multipart/form-data
+      description: 上传文章内嵌图片（支持jpg/jpeg/png/gif/webp）
+      parameters:
+      - description: 图片文件（≤10MB）
+        in: formData
+        name: file
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.SwaggerResponse'
+            - properties:
+                data:
+                  properties:
+                    file_size:
+                      format: int64
+                      type: integer
+                    filename:
+                      type: string
+                    id:
+                      type: integer
+                    image_url:
+                      type: string
+                    upload_time:
+                      type: string
+                  type: object
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.SwaggerResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.SwaggerResponse'
+      security:
+      - SessionAuth: []
+      summary: 上传文章图片
+      tags:
+      - 内容管理
+  /poll/{id}:
+    delete:
+      description: 作者或管理员删除投票
+      parameters:
+      - description: 投票ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.SwaggerResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.SwaggerResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/utils.SwaggerResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.SwaggerResponse'
+      security:
+      - SessionAuth: []
+      summary: 删除投票
+      tags:
+      - 投票
+    get:
+      description: 获取单个投票的详细信息
+      parameters:
+      - description: 投票ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.SwaggerResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.Poll'
+              type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.SwaggerResponse'
+      summary: 投票详情
+      tags:
+      - 投票
+  /poll/{id}/vote:
+    post:
+      consumes:
+      - application/json
+      description: 对投票进行投票（登录用户或匿名访客均可）
+      parameters:
+      - description: 投票ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 投票信息
+        in: body
+        name: body
+        required: true
+        schema:
+          properties:
+            option_index:
+              type: integer
+            visitor_id:
+              type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.SwaggerResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.SwaggerResponse'
+      summary: 投票
+      tags:
+      - 投票
+  /poll/create:
+    post:
+      consumes:
+      - application/json
+      description: 创建新的投票
+      parameters:
+      - description: 投票信息
+        in: body
+        name: body
+        required: true
+        schema:
+          properties:
+            description:
+              type: string
+            options:
+              items:
+                type: string
+              type: array
+            title:
+              type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.SwaggerResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.Poll'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.SwaggerResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.SwaggerResponse'
+      security:
+      - SessionAuth: []
+      summary: 创建投票
+      tags:
+      - 投票
+  /poll/list:
+    get:
+      description: 获取投票列表
+      parameters:
+      - default: 1
+        description: 页码
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: 每页数量
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.SwaggerResponse'
+            - properties:
+                data:
+                  properties:
+                    list:
+                      items:
+                        $ref: '#/definitions/models.Poll'
+                      type: array
+                    page:
+                      type: integer
+                    page_size:
+                      type: integer
+                    total:
+                      type: integer
+                    total_page:
+                      type: integer
+                  type: object
+              type: object
+      summary: 投票列表
+      tags:
+      - 投票
+securityDefinitions:
+  SessionAuth:
+    description: 登录后自动携带的session cookie
+    in: cookie
+    name: session_id
+    type: apiKey
+swagger: "2.0"

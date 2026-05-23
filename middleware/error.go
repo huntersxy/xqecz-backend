@@ -12,10 +12,9 @@ func ErrorHandler() gin.HandlerFunc {
 		c.Next()
 
 		if len(c.Errors) > 0 {
-			err := c.Errors.Last()
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"code":    500,
-				"message": err.Error(),
+				"message": "遇到问题啦",
 				"data":    nil,
 			})
 			c.Abort()

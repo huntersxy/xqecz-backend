@@ -1,0 +1,33 @@
+//go:build !noswagger
+// +build !noswagger
+
+package main
+
+import (
+	"log"
+	"os"
+	"os/exec"
+
+	_ "xiaoquan-backend/docs"
+
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
+	"github.com/gin-gonic/gin"
+)
+
+func registerSwaggerRoutes(r *gin.Engine) {
+	log.Println("[启动] Swagger 文档已启用，访问 /swagger/index.html")
+	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+}
+
+func autoSwagInit() {
+	log.Println("[启动] 正在重新生成 Swagger 文档...")
+	cmd := exec.Command("swag", "init")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		log.Printf("[警告] Swagger 文档生成失败: %v (请确保已安装 swag: go install github.com/swaggo/swag/cmd/swag@latest)", err)
+	} else {
+		log.Println("[启动] Swagger 文档生成成功")
+	}
+}

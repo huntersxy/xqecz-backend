@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"mime/multipart"
+	"net/http"
 	"os"
 	"path/filepath"
 	"time"
@@ -41,6 +42,10 @@ func (s *FileUploadService) Upload(file *multipart.FileHeader) (*FileUploadResul
 	}
 
 	if err := s.validateSize(file.Size); err != nil {
+		return nil, err
+	}
+
+	if err := s.validateMIME(file); err != nil {
 		return nil, err
 	}
 
@@ -105,6 +110,35 @@ func (s *FileUploadService) DeleteFile(filename string) error {
 	filePath := filepath.Join(s.config.UploadDir, filename)
 	if err := os.Remove(filePath); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("删除文件失败: %w", err)
+	}
+	return nil
+}
+
+func (s *FileUploadService) validateMIME(file *multipart.FileHeader) error {
+	f, err := file.Open()
+	if err != nil {
+		return fmt.Errorf("无法读取文件: %w", err)
+	}
+	defer f.Close()
+
+	buf := make([]byte, 512)
+	if _, err := io.ReadFull(f, buf); err != nil && err != io.ErrUnexpectedEOF {
+		return fmt.Errorf("无法读取文件头: %w", err)
+	}
+
+	mimeType := http.DetectContentType(buf)
+	allowed := map[string]bool{
+		"image/jpeg": true,
+		"image/png":  true,
+		"image/gif":  true,
+		"image/webp": true,
+		"video/mp4":  true,
+		"video/x-msvideo": true,
+		"video/quicktime": true,
+		"video/x-matroska": true,
+	}
+	if !allowed[mimeType] {
+		return fmt.Errorf("不支持的文件类型: %s", mimeType)
 	}
 	return nil
 }

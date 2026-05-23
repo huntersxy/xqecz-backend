@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"reflect"
 
 	"gopkg.in/yaml.v3"
 )
@@ -34,13 +35,22 @@ const (
 	DefaultRedisPrefix  = "xiaoquan:"
 
 	DefaultSpamAPIURL = ""
+	DefaultBotToken   = ""
 )
 
 type Config struct {
-	MySQL   MySQLConfig   `yaml:"mysql"`
-	Server  ServerConfig  `yaml:"server"`
-	SpamAPI SpamAPIConfig `yaml:"spam_api"`
-	Redis   RedisConfig    `yaml:"redis"`
+	MySQL             MySQLConfig      `yaml:"mysql"`
+	Server            ServerConfig     `yaml:"server"`
+	SpamAPI           SpamAPIConfig    `yaml:"spam_api"`
+	Redis             RedisConfig      `yaml:"redis"`
+	Bot               BotConfig        `yaml:"bot"`
+	Recommend         RecommendConfig  `yaml:"recommend"`
+	MigrateThumbnails bool             `yaml:"migrate_thumbnails"`
+	InitAdmin         bool             `yaml:"init_admin"`
+}
+
+type RecommendConfig struct {
+	ExcludedTags []string `yaml:"excluded_tags"`
 }
 
 type SpamAPIConfig struct {
@@ -54,6 +64,10 @@ type RedisConfig struct {
 	DB       int    `yaml:"db"`
 	Timeout  int    `yaml:"timeout"`
 	Prefix   string `yaml:"prefix"`
+}
+
+type BotConfig struct {
+	Token string `yaml:"token"`
 }
 
 type MySQLConfig struct {
@@ -70,10 +84,11 @@ type MySQLConfig struct {
 }
 
 type ServerConfig struct {
-	Port          int    `yaml:"port"`
-	UploadDir     string `yaml:"upload_dir"`
-	ThumbnailDir  string `yaml:"thumbnail_dir"`
-	MaxUploadSize int64  `yaml:"max_upload_size"`
+	Port           int      `yaml:"port"`
+	UploadDir      string   `yaml:"upload_dir"`
+	ThumbnailDir   string   `yaml:"thumbnail_dir"`
+	MaxUploadSize  int64    `yaml:"max_upload_size"`
+	AllowedOrigins []string `yaml:"allowed_origins"`
 }
 
 var AppConfig *Config
@@ -93,7 +108,19 @@ func LoadConfig(configPath string) error {
 		return fmt.Errorf("failed to parse config file: %w", err)
 	}
 
+	// 如果配置文件中不存在 migrate_thumbnails 字段，默认启用迁移
+	var raw map[string]interface{}
+	if yaml.Unmarshal(data, &raw) == nil {
+		if _, ok := raw["migrate_thumbnails"]; !ok {
+			AppConfig.MigrateThumbnails = true
+		}
+	}
+
 	ApplyDefaults(AppConfig)
+
+	if err := syncConfigFile(configPath, data); err != nil {
+		log.Printf("[配置] 同步配置文件失败: %v", err)
+	}
 
 	if err := EnsureDirectories(); err != nil {
 		return fmt.Errorf("failed to ensure directories: %w", err)
@@ -104,79 +131,45 @@ func LoadConfig(configPath string) error {
 }
 
 func ApplyDefaults(cfg *Config) {
-	if cfg.MySQL.Host == "" {
-		cfg.MySQL.Host = DefaultMySQLHost
-		log.Printf("[配置] MySQL主机未配置，使用默认值: %s", DefaultMySQLHost)
-	}
-	if cfg.MySQL.Port == 0 {
-		cfg.MySQL.Port = DefaultMySQLPort
-		log.Printf("[配置] MySQL端口未配置，使用默认值: %d", DefaultMySQLPort)
-	}
-	if cfg.MySQL.User == "" {
-		cfg.MySQL.User = DefaultMySQLUser
-		log.Printf("[配置] MySQL用户未配置，使用默认值: %s", DefaultMySQLUser)
-	}
-	if cfg.MySQL.Password == "" {
-		cfg.MySQL.Password = DefaultMySQLPassword
-		log.Printf("[配置] MySQL密码未配置，使用默认值: %s", DefaultMySQLPassword)
-	}
-	if cfg.MySQL.Database == "" {
-		cfg.MySQL.Database = DefaultMySQLDatabase
-		log.Printf("[配置] MySQL数据库未配置，使用默认值: %s", DefaultMySQLDatabase)
-	}
-	if cfg.MySQL.Charset == "" {
-		cfg.MySQL.Charset = DefaultMySQLCharset
-		log.Printf("[配置] MySQL字符集未配置，使用默认值: %s", DefaultMySQLCharset)
-	}
-	if cfg.MySQL.MaxOpenConns == 0 {
-		cfg.MySQL.MaxOpenConns = DefaultMaxOpenConns
-		log.Printf("[配置] MySQL最大打开连接数未配置，使用默认值: %d", DefaultMaxOpenConns)
-	}
-	if cfg.MySQL.MaxIdleConns == 0 {
-		cfg.MySQL.MaxIdleConns = DefaultMaxIdleConns
-		log.Printf("[配置] MySQL最大空闲连接数未配置，使用默认值: %d", DefaultMaxIdleConns)
-	}
-	if cfg.MySQL.ConnMaxLifetime == 0 {
-		cfg.MySQL.ConnMaxLifetime = DefaultConnMaxLifetime
-		log.Printf("[配置] MySQL连接最大生命周期未配置，使用默认值: %d秒", DefaultConnMaxLifetime)
-	}
-	if cfg.MySQL.ConnMaxIdleTime == 0 {
-		cfg.MySQL.ConnMaxIdleTime = DefaultConnMaxIdleTime
-		log.Printf("[配置] MySQL连接最大空闲时间未配置，使用默认值: %d秒", DefaultConnMaxIdleTime)
-	}
+	defaultCfg := GetDefaultConfig()
+	dv := reflect.ValueOf(cfg).Elem()
+	sv := reflect.ValueOf(defaultCfg).Elem()
+	mergeDefaults(dv, sv, "")
+}
 
-	if cfg.Server.Port == 0 {
-		cfg.Server.Port = DefaultServerPort
-		log.Printf("[配置] 服务器端口未配置，使用默认值: %d", DefaultServerPort)
-	}
-	if cfg.Server.UploadDir == "" {
-		cfg.Server.UploadDir = DefaultUploadDir
-		log.Printf("[配置] 上传目录未配置，使用默认值: %s", DefaultUploadDir)
-	}
-	if cfg.Server.ThumbnailDir == "" {
-		cfg.Server.ThumbnailDir = DefaultThumbnailDir
-		log.Printf("[配置] 缩略图目录未配置，使用默认值: %s", DefaultThumbnailDir)
-	}
-	if cfg.Server.MaxUploadSize == 0 {
-		cfg.Server.MaxUploadSize = DefaultMaxUploadSize
-		log.Printf("[配置] 最大上传大小未配置，使用默认值: %d字节(1GB)", DefaultMaxUploadSize)
-	}
+func mergeDefaults(dst, src reflect.Value, prefix string) {
+	t := dst.Type()
+	for i := 0; i < dst.NumField(); i++ {
+		df := dst.Field(i)
+		sf := src.Field(i)
+		if !df.CanSet() {
+			continue
+		}
+		fieldName := t.Field(i).Name
+		path := fieldName
+		if prefix != "" {
+			path = prefix + "." + fieldName
+		}
 
-	if cfg.Redis.Host == "" {
-		cfg.Redis.Host = DefaultRedisHost
-		log.Printf("[配置] Redis主机未配置，使用默认值: %s", DefaultRedisHost)
-	}
-	if cfg.Redis.Port == 0 {
-		cfg.Redis.Port = DefaultRedisPort
-		log.Printf("[配置] Redis端口未配置，使用默认值: %d", DefaultRedisPort)
-	}
-	if cfg.Redis.Timeout == 0 {
-		cfg.Redis.Timeout = DefaultRedisTimeout
-		log.Printf("[配置] Redis超时未配置，使用默认值: %d秒", DefaultRedisTimeout)
-	}
-	if cfg.Redis.Prefix == "" {
-		cfg.Redis.Prefix = DefaultRedisPrefix
-		log.Printf("[配置] Redis前缀未配置，使用默认值: %s", DefaultRedisPrefix)
+		switch df.Kind() {
+		case reflect.String:
+			if df.String() == "" && sf.String() != "" {
+				df.Set(sf)
+				log.Printf("[配置] %s 未配置，使用默认值: %s", path, sf.String())
+			}
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+			if df.Int() == 0 && sf.Int() != 0 {
+				df.Set(sf)
+				log.Printf("[配置] %s 未配置，使用默认值: %d", path, sf.Int())
+			}
+		case reflect.Slice:
+			if df.IsNil() && !sf.IsNil() {
+				df.Set(sf)
+				log.Printf("[配置] %s 未配置，使用默认值", path)
+			}
+		case reflect.Struct:
+			mergeDefaults(df, sf, path)
+		}
 	}
 }
 
@@ -220,10 +213,11 @@ func GetDefaultConfig() *Config {
 			ConnMaxIdleTime: DefaultConnMaxIdleTime,
 		},
 		Server: ServerConfig{
-			Port:          DefaultServerPort,
-			UploadDir:     DefaultUploadDir,
-			ThumbnailDir:  DefaultThumbnailDir,
-			MaxUploadSize: DefaultMaxUploadSize,
+			Port:           DefaultServerPort,
+			UploadDir:      DefaultUploadDir,
+			ThumbnailDir:   DefaultThumbnailDir,
+			MaxUploadSize:  DefaultMaxUploadSize,
+			AllowedOrigins: []string{"http://localhost:8080", "http://localhost:3000"},
 		},
 		SpamAPI: SpamAPIConfig{
 			URL: DefaultSpamAPIURL,
@@ -236,6 +230,13 @@ func GetDefaultConfig() *Config {
 			Timeout:  DefaultRedisTimeout,
 			Prefix:   DefaultRedisPrefix,
 		},
+		Bot: BotConfig{
+			Token: DefaultBotToken,
+		},
+		Recommend: RecommendConfig{
+			ExcludedTags: []string{"bot"},
+		},
+		MigrateThumbnails: true,
 	}
 }
 
@@ -265,6 +266,61 @@ func EnsureDirectories() error {
 	}
 
 	return nil
+}
+
+func SaveConfig(configPath string) error {
+	data, err := yaml.Marshal(AppConfig)
+	if err != nil {
+		return fmt.Errorf("failed to marshal config: %w", err)
+	}
+
+	if err := os.WriteFile(configPath, data, 0644); err != nil {
+		return fmt.Errorf("failed to write config file: %w", err)
+	}
+
+	return nil
+}
+
+func syncConfigFile(configPath string, userData []byte) error {
+	defaultCfg := GetDefaultConfig()
+	defaultData, err := yaml.Marshal(defaultCfg)
+	if err != nil {
+		return fmt.Errorf("生成默认配置失败: %w", err)
+	}
+
+	var userMap, defaultMap map[string]interface{}
+	if err := yaml.Unmarshal(userData, &userMap); err != nil {
+		return fmt.Errorf("解析用户配置失败: %w", err)
+	}
+	if err := yaml.Unmarshal(defaultData, &defaultMap); err != nil {
+		return fmt.Errorf("解析默认配置失败: %w", err)
+	}
+
+	mergeMap(defaultMap, userMap)
+
+	merged, err := yaml.Marshal(defaultMap)
+	if err != nil {
+		return fmt.Errorf("序列化配置失败: %w", err)
+	}
+
+	if err := os.WriteFile(configPath, merged, 0644); err != nil {
+		return fmt.Errorf("写入配置文件失败: %w", err)
+	}
+	return nil
+}
+
+func mergeMap(dst, src map[string]interface{}) {
+	for k, srcVal := range src {
+		if dstVal, ok := dst[k]; ok {
+			dstMap, dstOK := dstVal.(map[string]interface{})
+			srcMap, srcOK := srcVal.(map[string]interface{})
+			if dstOK && srcOK {
+				mergeMap(dstMap, srcMap)
+				continue
+			}
+		}
+		dst[k] = srcVal
+	}
 }
 
 func (m *MySQLConfig) DSN() string {
