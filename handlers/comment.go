@@ -2,9 +2,7 @@ package handlers
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -137,74 +135,61 @@ func AddComment(c *gin.Context) {
 	utils.RespondWithSuccess(c, comment)
 }
 
+const bannedWordsKey = 0x5A
+
 func checkBannedWords(text string) bool {
-	var bannedWords []string
+	var words []string
 
 	if utils.RedisClient != nil {
-		if err := utils.GetCacheJSON("banned_words", &bannedWords); err == nil && len(bannedWords) > 0 {
-			return checkWordsInList(text, bannedWords)
+		if err := utils.GetCacheJSON("banned_words", &words); err == nil && len(words) > 0 {
+			return checkWordsInList(text, words)
 		}
 	}
 
-	return checkBannedWordsFromFile(text)
-}
-
-func checkBannedWordsFromFile(text string) bool {
-	configDir := "./config"
-	bannedWordsFile := filepath.Join(configDir, "banned_words.json")
-
-	if err := ensureBannedWordsFile(bannedWordsFile); err != nil {
+	words = loadBannedWords()
+	if len(words) == 0 {
 		return false
 	}
 
-	file, err := os.Open(bannedWordsFile)
+	if utils.RedisClient != nil {
+		utils.SetCacheJSON("banned_words", words, 24*time.Hour)
+	}
+	return checkWordsInList(text, words)
+}
+
+func loadBannedWords() []string {
+	binPath := filepath.Join(".", "config", "banned_words.bin")
+	data, err := os.ReadFile(binPath)
 	if err != nil {
-		return false
+		return defaultBannedList()
 	}
-	defer file.Close()
-
-	var data struct {
-		Words []string `json:"words"`
+	if len(data) < 4 {
+		return defaultBannedList()
 	}
-
-	if err := sonic.ConfigDefault.NewDecoder(file).Decode(&data); err != nil {
-		return false
+	count := int(data[0]) | int(data[1])<<8 | int(data[2])<<16 | int(data[3])<<24
+	words := make([]string, 0, count)
+	pos := 4
+	for i := 0; i < count; i++ {
+		if pos+2 > len(data) {
+			break
+		}
+		wordLen := int(data[pos]) | int(data[pos+1])<<8
+		pos += 2
+		if pos+wordLen > len(data) {
+			break
+		}
+		decoded := make([]byte, wordLen)
+		for j := 0; j < wordLen; j++ {
+			decoded[j] = data[pos+j] ^ bannedWordsKey
+		}
+		pos += wordLen
+		words = append(words, string(decoded))
 	}
-
-	if utils.RedisClient != nil {
-		utils.SetCacheJSON("banned_words", data.Words, 24*time.Hour)
-	}
-
-	return checkWordsInList(text, data.Words)
+	return words
 }
 
-func ensureBannedWordsFile(filePath string) error {
-	if _, err := os.Stat(filePath); os.IsNotExist(err) {
-		log.Printf("[敏感词] 敏感词文件不存在，正在创建: %s", filePath)
-
-		dir := filepath.Dir(filePath)
-		if err := os.MkdirAll(dir, 0755); err != nil {
-			return fmt.Errorf("failed to create config directory: %w", err)
-		}
-
-		defaultBannedWords := map[string][]string{
-			"words": {
-				"admin", "test", "傻逼", "sb", "fuck",
-			},
-		}
-
-		data, err := json.MarshalIndent(defaultBannedWords, "", "  ")
-		if err != nil {
-			return fmt.Errorf("failed to marshal default banned words: %w", err)
-		}
-
-		if err := os.WriteFile(filePath, data, 0644); err != nil {
-			return fmt.Errorf("failed to write default banned words file: %w", err)
-		}
-
-		log.Printf("[敏感词] 默认敏感词文件已创建: %s", filePath)
-	}
-	return nil
+func defaultBannedList() []string {
+	return []string{"admin", "test", "sb", "fuck"}
 }
 
 func checkWordsInList(text string, words []string) bool {
