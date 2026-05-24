@@ -387,15 +387,17 @@ func applyContentListFilters(query *gorm.DB, c *gin.Context) *gorm.DB {
 }
 
 func validateSortParams(sortBy, order string) string {
-	validSortFields := map[string]bool{"created_at": true, "updated_at": true, "id": true}
-	validOrders := map[string]bool{"asc": true, "desc": true}
-	if !validSortFields[sortBy] {
-		sortBy = "created_at"
+	sortCol := "created_at"
+	if sortBy == "updated_at" {
+		sortCol = "updated_at"
+	} else if sortBy == "id" {
+		sortCol = "id"
 	}
-	if !validOrders[order] {
-		order = "desc"
+	sortOrder := "desc"
+	if order == "asc" {
+		sortOrder = "asc"
 	}
-	return sortBy + " " + order
+	return sortCol + " " + sortOrder
 }
 
 // GetMyContentList 获取我的内容列表
@@ -1273,35 +1275,47 @@ func sanitizeSearchInput(input string) string {
 func setTypeFields(result gin.H, content models.Content) {
 	switch content.Type {
 	case models.ContentTypeVideo:
-		if content.FilePath != "" {
-			result["video"] = "/uploads/" + content.FilePath
-			result["file_size"] = content.FileSize
-		}
-		if content.ThumbPath != "" {
-			result["thumb"] = thumbnailPath + content.ThumbPath
-		}
+		setVideoFields(result, content)
 	case models.ContentTypeImage:
-		if content.FilePath != "" {
-			if content.CompressedPath != "" {
-				result["img"] = "/images/" + content.CompressedPath
-			} else {
-				result["img"] = "/uploads/" + content.FilePath
-			}
-			result["file_size"] = content.FileSize
-		}
-		if content.ThumbPath != "" {
-			result["thumb"] = thumbnailPath + content.ThumbPath
-		}
+		setImageFields(result, content)
 	case models.ContentTypeText:
 		result["text"] = content.Content
 	case models.ContentTypeLink:
-		result["url"] = content.Url
-		if content.Platform != "" {
-			result["platform"] = content.Platform
+		setLinkFields(result, content)
+	}
+}
+
+func setVideoFields(result gin.H, content models.Content) {
+	if content.FilePath != "" {
+		result["video"] = "/uploads/" + content.FilePath
+		result["file_size"] = content.FileSize
+	}
+	if content.ThumbPath != "" {
+		result["thumb"] = thumbnailPath + content.ThumbPath
+	}
+}
+
+func setImageFields(result gin.H, content models.Content) {
+	if content.FilePath != "" {
+		if content.CompressedPath != "" {
+			result["img"] = "/images/" + content.CompressedPath
+		} else {
+			result["img"] = "/uploads/" + content.FilePath
 		}
-		if content.ThumbPath != "" {
-			result["thumb"] = thumbnailPath + content.ThumbPath
-		}
+		result["file_size"] = content.FileSize
+	}
+	if content.ThumbPath != "" {
+		result["thumb"] = thumbnailPath + content.ThumbPath
+	}
+}
+
+func setLinkFields(result gin.H, content models.Content) {
+	result["url"] = content.Url
+	if content.Platform != "" {
+		result["platform"] = content.Platform
+	}
+	if content.ThumbPath != "" {
+		result["thumb"] = thumbnailPath + content.ThumbPath
 	}
 }
 

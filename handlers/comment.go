@@ -354,38 +354,41 @@ func buildReplyMap(allReplies []models.Comment, commentIDMap map[uint]models.Com
 
 	commentRepliesMap := make(map[uint][]CommentReply)
 	for _, reply := range allReplies {
-		if reply.ParentID != nil {
-			replyItem := toReplyItem(reply)
-			if parent, ok := replyMap[*reply.ParentID]; ok {
-				replyItem.Parent = &CommentReply{
-					ID:        parent.ID,
-					UserID:    parent.UserID,
-					User:      CommentUser{ID: parent.User.ID, Username: parent.User.Username},
-					Text:      parent.Text,
-					ParentID:  parent.ParentID,
-					IsBanned:  parent.IsBanned,
-					CreatedAt: parent.CreatedAt.Unix(),
-				}
+		if reply.ParentID == nil {
+			continue
+		}
+		replyItem := toReplyItem(reply)
+		if parent, ok := replyMap[*reply.ParentID]; ok {
+			replyItem.Parent = &CommentReply{
+				ID:        parent.ID,
+				UserID:    parent.UserID,
+				User:      CommentUser{ID: parent.User.ID, Username: parent.User.Username},
+				Text:      parent.Text,
+				ParentID:  parent.ParentID,
+				IsBanned:  parent.IsBanned,
+				CreatedAt: parent.CreatedAt.Unix(),
 			}
-
-			rootID := *reply.ParentID
-			for {
-				if _, isRoot := commentIDMap[rootID]; isRoot {
-					break
-				}
-				if parent, hasParent := replyMap[rootID]; hasParent && parent.ParentID != nil {
-					rootID = *parent.ParentID
-				} else {
-					break
-				}
-			}
-
-			if _, isRoot := commentIDMap[rootID]; isRoot {
-				commentRepliesMap[rootID] = append(commentRepliesMap[rootID], replyItem)
-			}
+		}
+		rootID := findRootCommentID(reply.ParentID, replyMap, commentIDMap)
+		if _, isRoot := commentIDMap[rootID]; isRoot {
+			commentRepliesMap[rootID] = append(commentRepliesMap[rootID], replyItem)
 		}
 	}
 	return commentRepliesMap
+}
+
+func findRootCommentID(parentID *uint, replyMap map[uint]models.Comment, commentIDMap map[uint]models.Comment) uint {
+	rootID := *parentID
+	for {
+		if _, isRoot := commentIDMap[rootID]; isRoot {
+			return rootID
+		}
+		parent, hasParent := replyMap[rootID]
+		if !hasParent || parent.ParentID == nil {
+			return rootID
+		}
+		rootID = *parent.ParentID
+	}
 }
 
 // GetComments 评论列表

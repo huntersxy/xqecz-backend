@@ -115,25 +115,31 @@ func handleLinkUpload(title string, tags []string, c *gin.Context) (*models.Cont
 		AuditStatus: models.AuditStatusApproved,
 		Tags:        tags,
 	}
+	enrichLinkContent(content, linkUrl, title)
+	return content, nil
+}
+
+func enrichLinkContent(content *models.Content, linkUrl string, title string) {
 	platform, sourceID, err := services.DetectPlatform(linkUrl)
-	if err == nil {
-		videoInfo, err := services.FetchVideoInfo(platform, sourceID)
-		if err == nil {
-			content.Platform = string(videoInfo.Platform)
-			if title == "" || title == "Bot Upload" {
-				content.Title = videoInfo.Title
-			}
-			if videoInfo.CoverURL != "" || videoInfo.Platform == services.PlatformDouyin {
-				coverFilename, err := services.DownloadCover(videoInfo.CoverURL, 1, videoInfo.Platform == services.PlatformDouyin)
-				if err != nil {
-					log.Printf("Warning: failed to download cover for bot link: %v", err)
-				} else {
-					content.ThumbPath = coverFilename
-				}
-			}
+	if err != nil {
+		return
+	}
+	videoInfo, err := services.FetchVideoInfo(platform, sourceID)
+	if err != nil {
+		return
+	}
+	content.Platform = string(videoInfo.Platform)
+	if title == "" || title == "Bot Upload" {
+		content.Title = videoInfo.Title
+	}
+	if videoInfo.CoverURL != "" || videoInfo.Platform == services.PlatformDouyin {
+		coverFilename, err := services.DownloadCover(videoInfo.CoverURL, 1, videoInfo.Platform == services.PlatformDouyin)
+		if err != nil {
+			log.Printf("Warning: failed to download cover for bot link: %v", err)
+		} else {
+			content.ThumbPath = coverFilename
 		}
 	}
-	return content, nil
 }
 
 func handleFileUpload(title string, tags []string, c *gin.Context) (*models.Content, error) {

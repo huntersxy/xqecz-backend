@@ -5,85 +5,40 @@ import (
 )
 
 func TestDetectPlatform(t *testing.T) {
-	tests := []struct {
-		name          string
-		url           string
-		wantPlatform  VideoPlatform
-		wantSourceID  string
-		wantErrPrefix string
-	}{
+	runPlatformTests(t, []platformTestCase{
 		{"empty URL", "", "", "", "URL为空"},
 		{"invalid URL format", "://invalid", "", "", "无效的URL格式"},
 		{"unsupported platform", "https://example.com/video/123", "", "", "不支持的视频平台"},
-		{
-			name:         "B站 BV号",
-			url:          "https://www.bilibili.com/video/BV1GJ411x7h7",
-			wantPlatform: PlatformBilibili,
-			wantSourceID: "BV1GJ411x7h7",
-		},
-		{
-			name:         "B站短链接",
-			url:          "https://b23.tv/BV1xx411c7mD",
-			wantPlatform: PlatformBilibili,
-			wantSourceID: "BV1xx411c7mD",
-		},
-		{
-			name:         "B站 URL参数",
-			url:          "https://www.bilibili.com/video/BV1GJ411x7h7?p=1&t=30",
-			wantPlatform: PlatformBilibili,
-			wantSourceID: "BV1GJ411x7h7",
-		},
-		{
-			name:         "抖音标准链接",
-			url:          "https://www.douyin.com/video/1234567890123456789",
-			wantPlatform: PlatformDouyin,
-			wantSourceID: "1234567890123456789",
-		},
-	{
-		name:         "抖音短链接(当前不支持)",
-		url:          "https://v.douyin.com/abc123/",
-		wantErrPrefix: "无法从链接中提取抖音视频ID",
-	},
-		{
-			name:         "YouTube标准链接",
-			url:          "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-			wantPlatform: PlatformYouTube,
-			wantSourceID: "dQw4w9WgXcQ",
-		},
-		{
-			name:         "YouTube短链接",
-			url:          "https://youtu.be/dQw4w9WgXcQ",
-			wantPlatform: PlatformYouTube,
-			wantSourceID: "dQw4w9WgXcQ",
-		},
-		{
-			name:         "YouTube embed",
-			url:          "https://www.youtube.com/embed/dQw4w9WgXcQ",
-			wantPlatform: PlatformYouTube,
-			wantSourceID: "dQw4w9WgXcQ",
-		},
-		{
-			name:         "YouTube shorts",
-			url:          "https://www.youtube.com/shorts/dQw4w9WgXcQ",
-			wantPlatform: PlatformYouTube,
-			wantSourceID: "dQw4w9WgXcQ",
-		},
+		{"B站 BV号", "https://www.bilibili.com/video/BV1GJ411x7h7", PlatformBilibili, "BV1GJ411x7h7", ""},
+		{"B站短链接", "https://b23.tv/BV1xx411c7mD", PlatformBilibili, "BV1xx411c7mD", ""},
+		{"B站 URL参数", "https://www.bilibili.com/video/BV1GJ411x7h7?p=1&t=30", PlatformBilibili, "BV1GJ411x7h7", ""},
+		{"抖音标准链接", "https://www.douyin.com/video/1234567890123456789", PlatformDouyin, "1234567890123456789", ""},
+		{"抖音短链接(当前不支持)", "https://v.douyin.com/abc123/", "", "", "无法从链接中提取抖音视频ID"},
+		{"YouTube标准链接", "https://www.youtube.com/watch?v=dQw4w9WgXcQ", PlatformYouTube, "dQw4w9WgXcQ", ""},
+		{"YouTube短链接", "https://youtu.be/dQw4w9WgXcQ", PlatformYouTube, "dQw4w9WgXcQ", ""},
+		{"YouTube embed", "https://www.youtube.com/embed/dQw4w9WgXcQ", PlatformYouTube, "dQw4w9WgXcQ", ""},
+		{"YouTube shorts", "https://www.youtube.com/shorts/dQw4w9WgXcQ", PlatformYouTube, "dQw4w9WgXcQ", ""},
 		{"B站无BV号", "https://www.bilibili.com/", "", "", "无法从链接中提取B站BV号"},
 		{"抖音无视频ID", "https://www.douyin.com/discover", "", "", "无法从链接中提取抖音视频ID"},
 		{"YouTube无视频ID", "https://www.youtube.com/feed/trending", "", "", "无法从链接中提取YouTube视频ID"},
-	}
+	})
+}
 
+type platformTestCase struct {
+	name          string
+	url           string
+	wantPlatform  VideoPlatform
+	wantSourceID  string
+	wantErrPrefix string
+}
+
+func runPlatformTests(t *testing.T, tests []platformTestCase) {
+	t.Helper()
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			platform, sourceID, err := DetectPlatform(tt.url)
 			if tt.wantErrPrefix != "" {
-				if err == nil {
-					t.Errorf("DetectPlatform(%q) expected error containing %q, got nil", tt.url, tt.wantErrPrefix)
-					return
-				}
-				if !contains(err.Error(), tt.wantErrPrefix) {
-					t.Errorf("DetectPlatform(%q) error = %q, want containing %q", tt.url, err.Error(), tt.wantErrPrefix)
-				}
+				assertPlatformError(t, tt.url, err, tt.wantErrPrefix)
 				return
 			}
 			if err != nil {
@@ -97,6 +52,17 @@ func TestDetectPlatform(t *testing.T) {
 				t.Errorf("DetectPlatform(%q) sourceID = %q, want %q", tt.url, sourceID, tt.wantSourceID)
 			}
 		})
+	}
+}
+
+func assertPlatformError(t *testing.T, url string, err error, wantPrefix string) {
+	t.Helper()
+	if err == nil {
+		t.Errorf("DetectPlatform(%q) expected error containing %q, got nil", url, wantPrefix)
+		return
+	}
+	if !contains(err.Error(), wantPrefix) {
+		t.Errorf("DetectPlatform(%q) error = %q, want containing %q", url, err.Error(), wantPrefix)
 	}
 }
 

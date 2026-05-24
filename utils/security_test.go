@@ -128,25 +128,12 @@ func TestSanitizeHTML(t *testing.T) {
 func TestGenerateRandomString(t *testing.T) {
 	t.Run("valid_length", func(t *testing.T) {
 		for _, n := range []int{1, 8, 16, 32, 64} {
-			s := GenerateRandomString(n)
-			if len(s) != n {
-				t.Errorf("GenerateRandomString(%d) length = %d, want %d", n, len(s), n)
-			}
-			if s == "" && n > 0 {
-				t.Errorf("GenerateRandomString(%d) returned empty", n)
-			}
+			assertRandomStringLength(t, n)
 		}
 	})
 
 	t.Run("uniqueness", func(t *testing.T) {
-		seen := make(map[string]bool)
-		for i := 0; i < 100; i++ {
-			s := GenerateRandomString(16)
-			if seen[s] {
-				t.Fatal("GenerateRandomString produced duplicate value")
-			}
-			seen[s] = true
-		}
+		assertRandomStringUnique(t)
 	})
 
 	t.Run("zero_length", func(t *testing.T) {
@@ -155,6 +142,29 @@ func TestGenerateRandomString(t *testing.T) {
 			t.Errorf("GenerateRandomString(0) = %q, want empty", s)
 		}
 	})
+}
+
+func assertRandomStringLength(t *testing.T, n int) {
+	t.Helper()
+	s := GenerateRandomString(n)
+	if len(s) != n {
+		t.Errorf("GenerateRandomString(%d) length = %d, want %d", n, len(s), n)
+	}
+	if s == "" && n > 0 {
+		t.Errorf("GenerateRandomString(%d) returned empty", n)
+	}
+}
+
+func assertRandomStringUnique(t *testing.T) {
+	t.Helper()
+	seen := make(map[string]bool)
+	for i := 0; i < 100; i++ {
+		s := GenerateRandomString(16)
+		if seen[s] {
+			t.Fatal("GenerateRandomString produced duplicate value")
+		}
+		seen[s] = true
+	}
 }
 
 func TestRedisKeyConstants(t *testing.T) {
