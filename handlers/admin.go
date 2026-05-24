@@ -318,6 +318,30 @@ func UpdateUserRole(c *gin.Context) {
 	utils.RespondWithSuccess(c, user)
 }
 
+func deleteContentFiles(content models.Content) {
+	if content.FilePath != "" {
+		filePath := filepath.Join(config.AppConfig.Server.UploadDir, content.FilePath)
+		if err := os.Remove(filePath); err != nil {
+			log.Println("Failed to delete content file:", filePath, err)
+		}
+	}
+
+	if content.ThumbPath != "" {
+		thumbPath := filepath.Join(config.AppConfig.Server.ThumbnailDir, content.ThumbPath)
+		if err := os.Remove(thumbPath); err != nil {
+			log.Println("Failed to delete thumbnail:", thumbPath, err)
+		}
+	}
+
+	if content.CompressedPath != "" {
+		compressedPath := filepath.Join(config.AppConfig.Server.UploadDir, "..", "images", content.CompressedPath)
+		absPath, _ := filepath.Abs(compressedPath)
+		if err := os.Remove(absPath); err != nil {
+			log.Println("Failed to delete compressed image:", absPath, err)
+		}
+	}
+}
+
 // DeleteUser 删除用户
 // @Summary      删除用户
 // @Description  删除用户及其所有内容
@@ -344,28 +368,7 @@ func DeleteUser(c *gin.Context) {
 	}
 
 	for _, content := range contents {
-		if content.FilePath != "" {
-			filePath := filepath.Join(config.AppConfig.Server.UploadDir, content.FilePath)
-			if err := os.Remove(filePath); err != nil {
-				log.Println("Failed to delete content file:", filePath, err)
-			}
-		}
-
-		if content.ThumbPath != "" {
-			thumbPath := filepath.Join(config.AppConfig.Server.ThumbnailDir, content.ThumbPath)
-			if err := os.Remove(thumbPath); err != nil {
-				log.Println("Failed to delete thumbnail:", thumbPath, err)
-			}
-		}
-
-		if content.CompressedPath != "" {
-			compressedPath := filepath.Join(config.AppConfig.Server.UploadDir, "..", "images", content.CompressedPath)
-			absPath, _ := filepath.Abs(compressedPath)
-			if err := os.Remove(absPath); err != nil {
-				log.Println("Failed to delete compressed image:", absPath, err)
-			}
-		}
-
+		deleteContentFiles(content)
 		if err := utils.DB.Delete(&content).Error; err != nil {
 			log.Println("Failed to delete content record:", content.ID, err)
 		}
@@ -439,106 +442,24 @@ func BanUser(c *gin.Context) {
 }
 
 func RegenerateAllThumbnails(c *gin.Context) {
-	var contents []models.Content
-	query := utils.DB.Model(&models.Content{}).Where("type = ? AND file_path != ?", models.ContentTypeImage, "")
-	if err := query.Find(&contents).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"code":    500,
-			"message": "查询失败",
-			"data":    nil,
-		})
-		return
-	}
-
-	var videoContents []models.Content
-	utils.DB.Model(&models.Content{}).Where("type = ? AND file_path != ?", models.ContentTypeVideo, "").Find(&videoContents)
-	contents = append(contents, videoContents...)
-
-	var linkContents []models.Content
-	utils.DB.Model(&models.Content{}).Where("type = ? AND url != ?", models.ContentTypeLink, "").Find(&linkContents)
-	contents = append(contents, linkContents...)
+	contents := loadAllContents()
 
 	go func() {
 		total := len(contents)
 		success := 0
 		for _, content := range contents {
-			if content.Type == models.ContentTypeImage && content.FilePath != "" {
-				originalPath := filepath.Join(config.AppConfig.Server.UploadDir, content.FilePath)
-				thumbFilename, err := utils.GenerateImageThumbnail(originalPath, content.FilePath)
-				if err != nil {
-					log.Printf("Failed to generate thumbnail for content %d: %v", content.ID, err)
-					continue
-				}
-				utils.DB.Model(&content).Update("thumb_path", thumbFilename)
-				success++
-			} else if content.Type == models.ContentTypeVideo && content.FilePath != "" {
-				videoPath := filepath.Join(config.AppConfig.Server.UploadDir, content.FilePath)
-				thumbFilename, err := utils.GenerateVideoThumbnail(videoPath, content.FilePath)
-				if err != nil {
-					log.Printf("Failed to generate video thumbnail for content %d: %v", content.ID, err)
-					continue
-				}
-				utils.DB.Model(&content).Update("thumb_path", thumbFilename)
-				success++
-			} else if content.Type == models.ContentTypeLink && content.Url != "" {
-				platform, sourceID, err := services.DetectPlatform(content.Url)
-				if err != nil {
-					continue
-				}
-				videoInfo, err := services.FetchVideoInfo(platform, sourceID)
-				if err != nil {
-					continue
-				}
-				if videoInfo.CoverURL == "" && videoInfo.Platform != services.PlatformDouyin {
-					continue
-				}
-				coverFilename, err := services.DownloadCover(videoInfo.CoverURL, content.UserID, videoInfo.Platform == services.PlatformDouyin)
-				if err != nil {
-					log.Printf("Failed to download cover for content %d: %v", content.ID, err)
-					continue
-				}
-				utils.DB.Model(&content).Update("thumb_path", coverFilename)
-				success++
-				success++
+			switch content.Type {
+			case models.ContentTypeImage:
+				success += regenerateImageThumbnail(content)
+			case models.ContentTypeVideo:
+				success += regenerateVideoThumbnail(content)
+			case models.ContentTypeLink:
+				success += regenerateLinkThumbnail(content)
 			}
 		}
 		log.Printf("[缩略图] 批量重新生成完成: 总计=%d 成功=%d", total, success)
 
-		var allContents []models.Content
-		utils.DB.Unscoped().Select("thumb_path", "compressed_path").Find(&allContents)
-		recorded := make(map[string]bool)
-		for _, c := range allContents {
-			if c.ThumbPath != "" {
-				recorded[c.ThumbPath] = true
-			}
-			if c.CompressedPath != "" {
-				recorded[c.CompressedPath] = true
-			}
-		}
-		deleted := 0
-		thumbDir := config.AppConfig.Server.ThumbnailDir
-		entries, _ := os.ReadDir(thumbDir)
-		for _, e := range entries {
-			if !e.IsDir() && !recorded[e.Name()] {
-				if os.Remove(filepath.Join(thumbDir, e.Name())) == nil {
-					deleted++
-				}
-			}
-		}
-		imagesDir := filepath.Join(config.AppConfig.Server.UploadDir, "..", "images")
-		absImagesDir, _ := filepath.Abs(imagesDir)
-		imgEntries, _ := os.ReadDir(absImagesDir)
-		for _, e := range imgEntries {
-			if !e.IsDir() && !recorded[e.Name()] {
-				if os.Remove(filepath.Join(absImagesDir, e.Name())) == nil {
-					deleted++
-				}
-			}
-		}
-		if deleted > 0 {
-			log.Printf("[缩略图] 已清理 %d 个孤立文件", deleted)
-		}
-
+		cleanOrphanedThumbnails(buildRecordedMap())
 		ClearContentListCache()
 	}()
 
@@ -549,4 +470,115 @@ func RegenerateAllThumbnails(c *gin.Context) {
 			"count": len(contents),
 		},
 	})
+}
+
+func loadAllContents() []models.Content {
+	var contents []models.Content
+	query := utils.DB.Model(&models.Content{}).Where("type = ? AND file_path != ?", models.ContentTypeImage, "")
+	if err := query.Find(&contents).Error; err != nil {
+		return contents
+	}
+
+	var videoContents []models.Content
+	utils.DB.Model(&models.Content{}).Where("type = ? AND file_path != ?", models.ContentTypeVideo, "").Find(&videoContents)
+	contents = append(contents, videoContents...)
+
+	var linkContents []models.Content
+	utils.DB.Model(&models.Content{}).Where("type = ? AND url != ?", models.ContentTypeLink, "").Find(&linkContents)
+	contents = append(contents, linkContents...)
+
+	return contents
+}
+
+func regenerateImageThumbnail(content models.Content) int {
+	if content.FilePath == "" {
+		return 0
+	}
+	originalPath := filepath.Join(config.AppConfig.Server.UploadDir, content.FilePath)
+	thumbFilename, err := utils.GenerateImageThumbnail(originalPath, content.FilePath)
+	if err != nil {
+		log.Printf("Failed to generate thumbnail for content %d: %v", content.ID, err)
+		return 0
+	}
+	utils.DB.Model(&content).Update("thumb_path", thumbFilename)
+	return 1
+}
+
+func regenerateVideoThumbnail(content models.Content) int {
+	if content.FilePath == "" {
+		return 0
+	}
+	videoPath := filepath.Join(config.AppConfig.Server.UploadDir, content.FilePath)
+	thumbFilename, err := utils.GenerateVideoThumbnail(videoPath, content.FilePath)
+	if err != nil {
+		log.Printf("Failed to generate video thumbnail for content %d: %v", content.ID, err)
+		return 0
+	}
+	utils.DB.Model(&content).Update("thumb_path", thumbFilename)
+	return 1
+}
+
+func regenerateLinkThumbnail(content models.Content) int {
+	if content.Url == "" {
+		return 0
+	}
+	platform, sourceID, err := services.DetectPlatform(content.Url)
+	if err != nil {
+		return 0
+	}
+	videoInfo, err := services.FetchVideoInfo(platform, sourceID)
+	if err != nil {
+		return 0
+	}
+	if videoInfo.CoverURL == "" && videoInfo.Platform != services.PlatformDouyin {
+		return 0
+	}
+	coverFilename, err := services.DownloadCover(videoInfo.CoverURL, content.UserID, videoInfo.Platform == services.PlatformDouyin)
+	if err != nil {
+		log.Printf("Failed to download cover for content %d: %v", content.ID, err)
+		return 0
+	}
+	utils.DB.Model(&content).Update("thumb_path", coverFilename)
+	return 2
+}
+
+func buildRecordedMap() map[string]bool {
+	var allContents []models.Content
+	utils.DB.Unscoped().Select("thumb_path", "compressed_path").Find(&allContents)
+	recorded := make(map[string]bool)
+	for _, c := range allContents {
+		if c.ThumbPath != "" {
+			recorded[c.ThumbPath] = true
+		}
+		if c.CompressedPath != "" {
+			recorded[c.CompressedPath] = true
+		}
+	}
+	return recorded
+}
+
+func cleanOrphanedThumbnails(recorded map[string]bool) {
+	deleted := 0
+	thumbDir := config.AppConfig.Server.ThumbnailDir
+	entries, _ := os.ReadDir(thumbDir)
+	for _, e := range entries {
+		if !e.IsDir() && !recorded[e.Name()] {
+			if os.Remove(filepath.Join(thumbDir, e.Name())) == nil {
+				deleted++
+			}
+		}
+	}
+	imagesDir := filepath.Join(config.AppConfig.Server.UploadDir, "..", "images")
+	absImagesDir, _ := filepath.Abs(imagesDir)
+	imgEntries, _ := os.ReadDir(absImagesDir)
+	for _, e := range imgEntries {
+		if !e.IsDir() && !recorded[e.Name()] {
+			if os.Remove(filepath.Join(absImagesDir, e.Name())) == nil {
+				deleted++
+			}
+		}
+	}
+	if deleted > 0 {
+		log.Printf("[缩略图] 已清理 %d 个孤立文件", deleted)
+	}
 }

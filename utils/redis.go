@@ -18,6 +18,14 @@ import (
 var RedisClient *redis.Client
 var ctx = context.Background()
 
+const (
+	redisKeySession        = "session:"
+	redisKeyViewsDate      = "views:date:%s:%d"
+	redisKeyRecommendZSet  = "recommend:zset"
+	redisKeyRecommendTemp  = "recommend:zset:temp"
+	redisKeyUserInfo       = "user_info:"
+)
+
 func InitRedis() error {
 	cfg := config.AppConfig.Redis
 
@@ -77,19 +85,19 @@ func ExistsCache(key string) (bool, error) {
 }
 
 func SetSession(sessionID string, userID uint) error {
-	return RedisClient.Set(ctx, getKey("session:"+sessionID), userID, 30*24*time.Hour).Err()
+	return RedisClient.Set(ctx, getKey(redisKeySession+sessionID), userID, 30*24*time.Hour).Err()
 }
 
 func GetSession(sessionID string) (uint, error) {
-	val, err := RedisClient.Get(ctx, getKey("session:"+sessionID)).Uint64()
+	val, err := RedisClient.Get(ctx, getKey(redisKeySession+sessionID)).Uint64()
 	if err == nil {
-		RedisClient.Expire(ctx, getKey("session:"+sessionID), 30*24*time.Hour)
+		RedisClient.Expire(ctx, getKey(redisKeySession+sessionID), 30*24*time.Hour)
 	}
 	return uint(val), err
 }
 
 func DeleteSession(sessionID string) error {
-	return RedisClient.Del(ctx, getKey("session:"+sessionID)).Err()
+	return RedisClient.Del(ctx, getKey(redisKeySession+sessionID)).Err()
 }
 
 func ClearUserCache(userID uint) error {
@@ -126,7 +134,7 @@ func ClearCommentCache(contentID uint) error {
 }
 
 func IncrementViewCountByDate(contentID uint, dateStr string) error {
-	key := fmt.Sprintf("views:date:%s:%d", dateStr, contentID)
+	key := fmt.Sprintf(redisKeyViewsDate, dateStr, contentID)
 	err := RedisClient.Incr(ctx, getKey(key)).Err()
 	if err != nil {
 		return err
@@ -141,7 +149,7 @@ func GetViewCountInPeriod(contentID uint, days int) (int64, error) {
 	for i := 0; i < days; i++ {
 		date := now.AddDate(0, 0, -i)
 		dateStr := date.Format("2006-01-02")
-		key := fmt.Sprintf("views:date:%s:%d", dateStr, contentID)
+			key := fmt.Sprintf(redisKeyViewsDate, dateStr, contentID)
 		count, err := RedisClient.Get(ctx, getKey(key)).Int64()
 		if err == nil {
 			total += count
@@ -174,31 +182,9 @@ func GetAllPeriodViewCountsBatch(contentIDs []uint) map[uint]map[string]int64 {
 	}
 
 	now := time.Now()
-	numDays := 30
-	numContents := len(contentIDs)
+	keys, positions := buildViewCountKeys(contentIDs, now)
 
-	keys := make([]string, 0, numDays*numContents)
-	positions := make(map[string][2]int)
-
-	for day := 0; day < numDays; day++ {
-		date := now.AddDate(0, 0, -day)
-		dateStr := date.Format("2006-01-02")
-		for contentIdx, contentID := range contentIDs {
-			key := fmt.Sprintf("views:date:%s:%d", dateStr, contentID)
-			realKey := getKey(key)
-			keys = append(keys, realKey)
-			positions[realKey] = [2]int{day, contentIdx}
-		}
-	}
-
-	for _, contentID := range contentIDs {
-		result[contentID] = map[string]int64{
-			"1day":   0,
-			"3day":   0,
-			"7day":   0,
-			"1month": 0,
-		}
-	}
+	result = initViewCountResult(contentIDs)
 
 	if len(keys) == 0 {
 		return result
@@ -219,72 +205,113 @@ func GetAllPeriodViewCountsBatch(contentIDs []uint) map[uint]map[string]int64 {
 
 		day := pos[0]
 		contentID := contentIDs[pos[1]]
-
-		var count int64
-		if value != nil {
-			switch v := value.(type) {
-			case int64:
-				count = v
-			case int:
-				count = int64(v)
-			case string:
-				fmt.Sscanf(v, "%d", &count)
-			}
-		}
-
-		if day < 1 {
-			result[contentID]["1day"] += count
-		}
-		if day < 3 {
-			result[contentID]["3day"] += count
-		}
-		if day < 7 {
-			result[contentID]["7day"] += count
-		}
-		if day < 30 {
-			result[contentID]["1month"] += count
-		}
+		count := parseRedisValue(value)
+		accumulateViewCounts(result, contentID, day, count)
 	}
 
 	return result
 }
 
+func buildViewCountKeys(contentIDs []uint, now time.Time) ([]string, map[string][2]int) {
+	numDays := 30
+	numContents := len(contentIDs)
+	keys := make([]string, 0, numDays*numContents)
+	positions := make(map[string][2]int)
+
+	for day := 0; day < numDays; day++ {
+		date := now.AddDate(0, 0, -day)
+		dateStr := date.Format("2006-01-02")
+		for contentIdx, contentID := range contentIDs {
+			key := fmt.Sprintf(redisKeyViewsDate, dateStr, contentID)
+			realKey := getKey(key)
+			keys = append(keys, realKey)
+			positions[realKey] = [2]int{day, contentIdx}
+		}
+	}
+
+	return keys, positions
+}
+
+func initViewCountResult(contentIDs []uint) map[uint]map[string]int64 {
+	result := make(map[uint]map[string]int64)
+	for _, contentID := range contentIDs {
+		result[contentID] = map[string]int64{
+			"1day":   0,
+			"3day":   0,
+			"7day":   0,
+			"1month": 0,
+		}
+	}
+	return result
+}
+
+func parseRedisValue(value interface{}) int64 {
+	if value == nil {
+		return 0
+	}
+	var count int64
+	switch v := value.(type) {
+	case int64:
+		count = v
+	case int:
+		count = int64(v)
+	case string:
+		fmt.Sscanf(v, "%d", &count)
+	}
+	return count
+}
+
+func accumulateViewCounts(result map[uint]map[string]int64, contentID uint, day int, count int64) {
+	if day < 1 {
+		result[contentID]["1day"] += count
+	}
+	if day < 3 {
+		result[contentID]["3day"] += count
+	}
+	if day < 7 {
+		result[contentID]["7day"] += count
+	}
+	if day < 30 {
+		result[contentID]["1month"] += count
+	}
+}
+
 func ZAddRecommend(contentID uint, score float64) error {
-	return RedisClient.ZAdd(ctx, getKey("recommend:zset"), &redis.Z{Score: score, Member: contentID}).Err()
+	return RedisClient.ZAdd(ctx, getKey(redisKeyRecommendZSet), &redis.Z{Score: score, Member: contentID}).Err()
 }
 
 func ZRevRangeRecommend(start, stop int64) ([]string, error) {
-	return RedisClient.ZRevRange(ctx, getKey("recommend:zset"), start, stop).Result()
+	return RedisClient.ZRevRange(ctx, getKey(redisKeyRecommendZSet), start, stop).Result()
 }
 
 func ZCardRecommend() (int64, error) {
-	return RedisClient.ZCard(ctx, getKey("recommend:zset")).Result()
+	return RedisClient.ZCard(ctx, getKey(redisKeyRecommendZSet)).Result()
 }
 
 func ZDelRecommend(contentID uint) error {
-	return RedisClient.ZRem(ctx, getKey("recommend:zset"), contentID).Err()
+	return RedisClient.ZRem(ctx, getKey(redisKeyRecommendZSet), contentID).Err()
 }
 
 func ZClearRecommend() error {
-	return RedisClient.Del(ctx, getKey("recommend:zset")).Err()
+	return RedisClient.Del(ctx, getKey(redisKeyRecommendZSet)).Err()
 }
 
 func ZGetScoreRecommend(contentID uint) (float64, error) {
-	return RedisClient.ZScore(ctx, getKey("recommend:zset"), fmt.Sprintf("%d", contentID)).Result()
+	return RedisClient.ZScore(ctx, getKey(redisKeyRecommendZSet), fmt.Sprintf("%d", contentID)).Result()
 }
 
 func ZAddToTempRecommend(contentID uint, score float64) error {
-	return RedisClient.ZAdd(ctx, getKey("recommend:zset:temp"), &redis.Z{Score: score, Member: contentID}).Err()
+	return RedisClient.ZAdd(ctx, getKey(redisKeyRecommendTemp), &redis.Z{Score: score, Member: contentID}).Err()
 }
 
 func SwapRecommendZSet() error {
-	tempKey := getKey("recommend:zset:temp")
-	mainKey := getKey("recommend:zset")
+	tempKey := getKey(redisKeyRecommendTemp)
+	mainKey := getKey(redisKeyRecommendZSet)
 	return RedisClient.Rename(ctx, tempKey, mainKey).Err()
 }
 
 func DeleteTempRecommendZSet() error {
-	return RedisClient.Del(ctx, getKey("recommend:zset:temp")).Err()
+	return RedisClient.Del(ctx, getKey(redisKeyRecommendTemp)).Err()
 }
 
 func ClearCachesOnStartup() {
@@ -299,13 +326,7 @@ func ClearCachesOnStartup() {
 			log.Printf("[缓存] 扫描失败: %v", err)
 			return
 		}
-		var toDelete []string
-		for _, key := range keys {
-			if strings.Contains(key, ":session:") || strings.Contains(key, ":views:") {
-				continue
-			}
-			toDelete = append(toDelete, key)
-		}
+		toDelete := filterCacheKeys(keys)
 		if len(toDelete) > 0 {
 			if err := RedisClient.Del(ctx, toDelete...).Err(); err != nil {
 				log.Printf("[缓存] 删除失败: %v", err)
@@ -321,12 +342,23 @@ func ClearCachesOnStartup() {
 	log.Printf("[缓存] 启动清理完成，已清除 %d 个缓存键（保留登录态）", deleted)
 }
 
+func filterCacheKeys(keys []string) []string {
+	var toDelete []string
+	for _, key := range keys {
+		if strings.Contains(key, ":session:") || strings.Contains(key, ":views:") {
+			continue
+		}
+		toDelete = append(toDelete, key)
+	}
+	return toDelete
+}
+
 func GetUserInfoCache(userID uint) (*models.User, error) {
 	if RedisClient == nil {
 		return nil, fmt.Errorf("redis not available")
 	}
 	var user models.User
-	if err := GetCacheJSON("user_info:"+strconv.Itoa(int(userID)), &user); err != nil {
+	if err := GetCacheJSON(redisKeyUserInfo+strconv.Itoa(int(userID)), &user); err != nil {
 		return nil, err
 	}
 	return &user, nil
@@ -336,14 +368,14 @@ func SetUserInfoCache(user *models.User) {
 	if RedisClient == nil {
 		return
 	}
-	SetCacheJSON("user_info:"+strconv.Itoa(int(user.ID)), user, 5*time.Minute)
+	SetCacheJSON(redisKeyUserInfo+strconv.Itoa(int(user.ID)), user, 5*time.Minute)
 }
 
 func ClearUserInfoCache(userID uint) {
 	if RedisClient == nil {
 		return
 	}
-	DelCache("user_info:" + strconv.Itoa(int(userID)))
+	DelCache(redisKeyUserInfo + strconv.Itoa(int(userID)))
 }
 
 func GetKey(key string) string {

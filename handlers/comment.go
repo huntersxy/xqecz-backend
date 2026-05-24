@@ -19,6 +19,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+const errInvalidContentID = "无效的内容ID"
+
 type CommentUser struct {
 	ID       uint   `json:"id"`
 	Username string `json:"username"`
@@ -80,7 +82,7 @@ func AddComment(c *gin.Context) {
 	contentIDStr := c.PostForm("content_id")
 	contentID, err := strconv.ParseUint(contentIDStr, 10, 32)
 	if err != nil || contentID == 0 {
-		utils.RespondWithError(c, http.StatusBadRequest, "无效的内容ID")
+		utils.RespondWithError(c, http.StatusBadRequest, errInvalidContentID)
 		return
 	}
 
@@ -226,20 +228,24 @@ func (ac *acAutomaton) build() {
 		cur := queue[0]
 		queue = queue[1:]
 		for ch, child := range cur.children {
-			f := cur.fail
-			for f != nil && f.children != nil && f.children[ch] == nil {
-				f = f.fail
-			}
-			if f != nil && f.children != nil && f.children[ch] != nil {
-				child.fail = f.children[ch]
-			} else {
-				child.fail = ac.root
-			}
-			if child.fail.output {
-				child.output = true
-			}
+			ac.processChild(cur, child, ch)
 			queue = append(queue, child)
 		}
+	}
+}
+
+func (ac *acAutomaton) processChild(cur, child *acNode, ch rune) {
+	f := cur.fail
+	for f != nil && f.children != nil && f.children[ch] == nil {
+		f = f.fail
+	}
+	if f != nil && f.children != nil && f.children[ch] != nil {
+		child.fail = f.children[ch]
+	} else {
+		child.fail = ac.root
+	}
+	if child.fail.output {
+		child.output = true
 	}
 }
 
@@ -321,6 +327,70 @@ func asyncCheckSpamAPI(commentID uint, text string) {
 	}
 }
 
+func parseCommentPagination(c *gin.Context) (page, pageSize int, contentID uint, err error) {
+	contentIDStr := c.Param("content_id")
+	parsed, parseErr := strconv.ParseUint(contentIDStr, 10, 32)
+	if parseErr != nil {
+		return 0, 0, 0, fmt.Errorf(errInvalidContentID)
+	}
+	contentID = uint(parsed)
+
+	page, _ = strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ = strconv.Atoi(c.DefaultQuery("page_size", "20"))
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = 20
+	}
+	return page, pageSize, contentID, nil
+}
+
+func buildReplyMap(allReplies []models.Comment, commentIDMap map[uint]models.Comment) map[uint][]CommentReply {
+	replyMap := make(map[uint]models.Comment)
+	for _, reply := range allReplies {
+		replyMap[reply.ID] = reply
+	}
+
+	commentRepliesMap := make(map[uint][]CommentReply)
+	for _, reply := range allReplies {
+		if reply.ParentID == nil {
+			continue
+		}
+		replyItem := toReplyItem(reply)
+		if parent, ok := replyMap[*reply.ParentID]; ok {
+			replyItem.Parent = &CommentReply{
+				ID:        parent.ID,
+				UserID:    parent.UserID,
+				User:      CommentUser{ID: parent.User.ID, Username: parent.User.Username},
+				Text:      parent.Text,
+				ParentID:  parent.ParentID,
+				IsBanned:  parent.IsBanned,
+				CreatedAt: parent.CreatedAt.Unix(),
+			}
+		}
+		rootID := findRootCommentID(reply.ParentID, replyMap, commentIDMap)
+		if _, isRoot := commentIDMap[rootID]; isRoot {
+			commentRepliesMap[rootID] = append(commentRepliesMap[rootID], replyItem)
+		}
+	}
+	return commentRepliesMap
+}
+
+func findRootCommentID(parentID *uint, replyMap map[uint]models.Comment, commentIDMap map[uint]models.Comment) uint {
+	rootID := *parentID
+	for {
+		if _, isRoot := commentIDMap[rootID]; isRoot {
+			return rootID
+		}
+		parent, hasParent := replyMap[rootID]
+		if !hasParent || parent.ParentID == nil {
+			return rootID
+		}
+		rootID = *parent.ParentID
+	}
+}
+
 // GetComments 评论列表
 // @Summary      评论列表
 // @Description  获取指定内容的评论列表（嵌套回复，分页）
@@ -332,20 +402,10 @@ func asyncCheckSpamAPI(commentID uint, text string) {
 // @Success      200 {object} utils.SwaggerResponse{data=object{list=[]models.Comment,total=int,page=int,page_size=int,total_page=int}}
 // @Router       /comment/list/{content_id} [get]
 func GetComments(c *gin.Context) {
-	contentIDStr := c.Param("content_id")
-	contentID, err := strconv.ParseUint(contentIDStr, 10, 32)
+	page, pageSize, contentID, err := parseCommentPagination(c)
 	if err != nil {
-		utils.RespondWithError(c, http.StatusBadRequest, "无效的内容ID")
+		utils.RespondWithError(c, http.StatusBadRequest, err.Error())
 		return
-	}
-
-	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
-	if page < 1 {
-		page = 1
-	}
-	if pageSize < 1 {
-		pageSize = 20
 	}
 
 	var total int64
@@ -357,7 +417,7 @@ func GetComments(c *gin.Context) {
 
 	var comments []models.Comment
 	offset := (page - 1) * pageSize
-	cacheKey := fmt.Sprintf("comments:%s:page:%d:size:%d", contentIDStr, page, pageSize)
+	cacheKey := fmt.Sprintf("comments:%d:page:%d:size:%d", contentID, page, pageSize)
 
 	if utils.RedisClient != nil {
 		var cached CommentListResponse
@@ -377,10 +437,8 @@ func GetComments(c *gin.Context) {
 		return
 	}
 
-	var allCommentIDs []uint
 	commentIDMap := make(map[uint]models.Comment)
 	for _, cmt := range comments {
-		allCommentIDs = append(allCommentIDs, cmt.ID)
 		commentIDMap[cmt.ID] = cmt
 	}
 
@@ -390,44 +448,7 @@ func GetComments(c *gin.Context) {
 		Order("created_at ASC").
 		Find(&allReplies)
 
-	replyMap := make(map[uint]models.Comment)
-	for _, reply := range allReplies {
-		replyMap[reply.ID] = reply
-	}
-
-	commentRepliesMap := make(map[uint][]CommentReply)
-	for _, reply := range allReplies {
-		if reply.ParentID != nil {
-			replyItem := toReplyItem(reply)
-			if parent, ok := replyMap[*reply.ParentID]; ok {
-				replyItem.Parent = &CommentReply{
-					ID:        parent.ID,
-					UserID:    parent.UserID,
-					User:      CommentUser{ID: parent.User.ID, Username: parent.User.Username},
-					Text:      parent.Text,
-					ParentID:  parent.ParentID,
-					IsBanned:  parent.IsBanned,
-					CreatedAt: parent.CreatedAt.Unix(),
-				}
-			}
-
-			rootID := *reply.ParentID
-			for {
-				if _, isRoot := commentIDMap[rootID]; isRoot {
-					break
-				}
-				if parent, hasParent := replyMap[rootID]; hasParent && parent.ParentID != nil {
-					rootID = *parent.ParentID
-				} else {
-					break
-				}
-			}
-
-			if _, isRoot := commentIDMap[rootID]; isRoot {
-				commentRepliesMap[rootID] = append(commentRepliesMap[rootID], replyItem)
-			}
-		}
-	}
+	commentRepliesMap := buildReplyMap(allReplies, commentIDMap)
 
 	result := CommentListResponse{
 		List:      make([]CommentItem, 0, len(comments)),
@@ -538,7 +559,7 @@ func GetCommentCount(c *gin.Context) {
 	contentIDStr := c.Param("content_id")
 	contentID, err := strconv.ParseUint(contentIDStr, 10, 32)
 	if err != nil {
-		utils.RespondWithError(c, http.StatusBadRequest, "无效的内容ID")
+		utils.RespondWithError(c, http.StatusBadRequest, errInvalidContentID)
 		return
 	}
 
