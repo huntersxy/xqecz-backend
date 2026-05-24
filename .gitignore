@@ -5,9 +5,8 @@ xiaoquan-backend
 # 配置文件（含真实凭据）
 config/config.yaml
 
-# 敏感词库（二进制编码 + 原始文件）
+# 敏感词库（原始明文不提交，二进制编码可提交）
 config/banned_words.json
-config/banned_words.bin
 config/IllegalWords-lexicon.json
 
 # 运行时目录
