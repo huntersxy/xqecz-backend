@@ -301,13 +301,17 @@ func ClearCachesOnStartup() {
 		}
 		var toDelete []string
 		for _, key := range keys {
-			if !strings.Contains(key, ":session:") {
-				toDelete = append(toDelete, key)
+			if strings.Contains(key, ":session:") || strings.Contains(key, ":views:") {
+				continue
 			}
+			toDelete = append(toDelete, key)
 		}
 		if len(toDelete) > 0 {
-			RedisClient.Del(ctx, toDelete...)
-			deleted += len(toDelete)
+			if err := RedisClient.Del(ctx, toDelete...).Err(); err != nil {
+				log.Printf("[缓存] 删除失败: %v", err)
+			} else {
+				deleted += len(toDelete)
+			}
 		}
 		cursor = next
 		if cursor == 0 {

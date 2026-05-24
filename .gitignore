@@ -1,0 +1,29 @@
+# 二进制
+*.exe
+xiaoquan-backend
+
+# 配置文件（含真实凭据）
+config/config.yaml
+
+# 运行时目录
+uploads/
+thumbnails/
+images/
+
+# IDE
+.vscode/
+.cursor/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 依赖
+node_modules/
+
+# 临时文件
+*.tmp
+*.log

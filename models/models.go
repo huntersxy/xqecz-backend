@@ -41,7 +41,8 @@ type Content struct {
 	Content     string         `gorm:"type:text" json:"content,omitempty"`
 	FilePath    string         `gorm:"size:500" json:"file_path,omitempty"`
 	FileSize    int64          `json:"file_size,omitempty"`
-	ThumbPath   string         `gorm:"size:500" json:"thumb_path,omitempty"`
+	ThumbPath       string         `gorm:"size:500" json:"thumb_path,omitempty"`
+	CompressedPath  string         `gorm:"size:500;default:''" json:"compressed_path,omitempty"`
 	Url         string         `gorm:"size:500" json:"url,omitempty"`
 	Platform    string         `gorm:"size:20" json:"platform,omitempty"`
 	ViewCount   int64          `gorm:"default:0" json:"view_count"`

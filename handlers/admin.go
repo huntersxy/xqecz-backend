@@ -358,6 +358,14 @@ func DeleteUser(c *gin.Context) {
 			}
 		}
 
+		if content.CompressedPath != "" {
+			compressedPath := filepath.Join(config.AppConfig.Server.UploadDir, "..", "images", content.CompressedPath)
+			absPath, _ := filepath.Abs(compressedPath)
+			if err := os.Remove(absPath); err != nil {
+				log.Println("Failed to delete compressed image:", absPath, err)
+			}
+		}
+
 		if err := utils.DB.Delete(&content).Error; err != nil {
 			log.Println("Failed to delete content record:", content.ID, err)
 		}
@@ -497,11 +505,14 @@ func RegenerateAllThumbnails(c *gin.Context) {
 		log.Printf("[缩略图] 批量重新生成完成: 总计=%d 成功=%d", total, success)
 
 		var allContents []models.Content
-		utils.DB.Unscoped().Select("thumb_path").Find(&allContents)
+		utils.DB.Unscoped().Select("thumb_path", "compressed_path").Find(&allContents)
 		recorded := make(map[string]bool)
 		for _, c := range allContents {
 			if c.ThumbPath != "" {
 				recorded[c.ThumbPath] = true
+			}
+			if c.CompressedPath != "" {
+				recorded[c.CompressedPath] = true
 			}
 		}
 		deleted := 0
@@ -514,8 +525,18 @@ func RegenerateAllThumbnails(c *gin.Context) {
 				}
 			}
 		}
+		imagesDir := filepath.Join(config.AppConfig.Server.UploadDir, "..", "images")
+		absImagesDir, _ := filepath.Abs(imagesDir)
+		imgEntries, _ := os.ReadDir(absImagesDir)
+		for _, e := range imgEntries {
+			if !e.IsDir() && !recorded[e.Name()] {
+				if os.Remove(filepath.Join(absImagesDir, e.Name())) == nil {
+					deleted++
+				}
+			}
+		}
 		if deleted > 0 {
-			log.Printf("[缩略图] 已清理 %d 个孤立缩略图文件", deleted)
+			log.Printf("[缩略图] 已清理 %d 个孤立文件", deleted)
 		}
 
 		ClearContentListCache()

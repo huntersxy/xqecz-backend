@@ -14,8 +14,7 @@ if "%1"=="dev" (
 )
 
 if %errorlevel% equ 0 (
-    copy xiaoquan-backend ..\xiaoquan-backend-deploy\
-    echo [OK] xiaoquan-backend copied to deploy dir
+    echo [OK] xiaoquan-backend
 ) else (
     echo [FAILED]
 )

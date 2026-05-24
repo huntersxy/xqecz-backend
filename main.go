@@ -62,20 +62,18 @@ func main() {
 		config.AppConfig.MigrateThumbnails = false
 		if err := config.SaveConfig("./config/config.yaml"); err != nil {
 			log.Printf("[启动] 保存迁移状态失败: %v", err)
-	} else {
-		log.Println("[启动] Redis连接成功")
-		utils.ClearCachesOnStartup()
-		go scheduler.StartRecommendScheduler()
-	}
+		}
 	}
 
 	if err := utils.InitRedis(); err != nil {
 		log.Printf("[警告] Redis连接失败，将使用内存存储Session: %v", err)
 	} else {
 		log.Println("[启动] Redis连接成功")
-		// 启动推荐列表更新调度器
+		utils.ClearCachesOnStartup()
 		go scheduler.StartRecommendScheduler()
 	}
+
+	go scheduler.StartTinifyScheduler()
 
 	if err := utils.CheckFFmpeg(); err != nil {
 		log.Printf("[警告] %v，视频封面图功能将不可用", err)
@@ -97,6 +95,7 @@ func main() {
 
 	r.Static("/uploads", config.AppConfig.Server.UploadDir)
 	r.Static("/thumbnails", config.AppConfig.Server.ThumbnailDir)
+	r.Static("/images", "./images")
 
 	registerSwaggerRoutes(r)
 

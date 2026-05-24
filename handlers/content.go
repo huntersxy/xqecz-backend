@@ -68,7 +68,7 @@ func UploadArticleImage(c *gin.Context) {
 		return
 	}
 
-	imageURL := fmt.Sprintf("http://%s%s", c.Request.Host, result.URL)
+	imageURL := result.URL
 
 	c.JSON(http.StatusOK, gin.H{
 		"code":    200,
@@ -746,6 +746,16 @@ func UpdateContent(c *gin.Context) {
 				}
 			}
 
+			if content.CompressedPath != "" {
+				oldCompressedPath := filepath.Join(config.AppConfig.Server.UploadDir, "..", "images", content.CompressedPath)
+				absPath, _ := filepath.Abs(oldCompressedPath)
+				if err := os.Remove(absPath); err != nil {
+					log.Printf("Warning: failed to delete old compressed image: %v", err)
+				}
+				content.CompressedPath = ""
+				content.ThumbPath = ""
+			}
+
 			var allowedExtensions []string
 			var maxSize int64
 
@@ -945,13 +955,17 @@ func DeleteContent(c *gin.Context) {
 	}
 
 	if content.ThumbPath != "" {
-		thumbDir := config.AppConfig.Server.ThumbnailDir
-		if content.Type == models.ContentTypeImage {
-			thumbDir = config.AppConfig.Server.ThumbnailDir
-		}
-		thumbPath := filepath.Join(thumbDir, content.ThumbPath)
+		thumbPath := filepath.Join(config.AppConfig.Server.ThumbnailDir, content.ThumbPath)
 		if err := os.Remove(thumbPath); err != nil {
 			log.Println("Failed to delete thumbnail:", thumbPath, err)
+		}
+	}
+
+	if content.CompressedPath != "" {
+		compressedPath := filepath.Join(config.AppConfig.Server.UploadDir, "..", "images", content.CompressedPath)
+		absPath, _ := filepath.Abs(compressedPath)
+		if err := os.Remove(absPath); err != nil {
+			log.Println("Failed to delete compressed image:", absPath, err)
 		}
 	}
 
@@ -1312,19 +1326,23 @@ func buildContentDetail(c *gin.Context, content models.Content) gin.H {
 	switch content.Type {
 	case models.ContentTypeVideo:
 		if content.FilePath != "" {
-			result["video"] = "http://" + c.Request.Host + "/uploads/" + content.FilePath
+			result["video"] = "/uploads/" + content.FilePath
 			result["file_size"] = content.FileSize
 		}
 		if content.ThumbPath != "" {
-			result["thumb"] = "http://" + c.Request.Host + "/thumbnails/" + content.ThumbPath
+			result["thumb"] = "/thumbnails/" + content.ThumbPath
 		}
 	case models.ContentTypeImage:
 		if content.FilePath != "" {
-			result["img"] = "http://" + c.Request.Host + "/uploads/" + content.FilePath
+			if content.CompressedPath != "" {
+				result["img"] = "/images/" + content.CompressedPath
+			} else {
+				result["img"] = "/uploads/" + content.FilePath
+			}
 			result["file_size"] = content.FileSize
 		}
 		if content.ThumbPath != "" {
-			result["thumb"] = "http://" + c.Request.Host + "/thumbnails/" + content.ThumbPath
+			result["thumb"] = "/thumbnails/" + content.ThumbPath
 		}
 	case models.ContentTypeText:
 		result["text"] = content.Content
@@ -1334,7 +1352,7 @@ func buildContentDetail(c *gin.Context, content models.Content) gin.H {
 			result["platform"] = content.Platform
 		}
 		if content.ThumbPath != "" {
-			result["thumb"] = "http://" + c.Request.Host + "/thumbnails/" + content.ThumbPath
+			result["thumb"] = "/thumbnails/" + content.ThumbPath
 		}
 	}
 
@@ -1362,16 +1380,16 @@ func buildContentSummary(c *gin.Context, content models.Content) gin.H {
 	switch content.Type {
 	case models.ContentTypeVideo:
 		if content.ThumbPath != "" {
-			result["thumb"] = "http://" + c.Request.Host + "/thumbnails/" + content.ThumbPath
+			result["thumb"] = "/thumbnails/" + content.ThumbPath
 		}
 	case models.ContentTypeImage:
 		if content.ThumbPath != "" {
-			result["thumb"] = "http://" + c.Request.Host + "/thumbnails/" + content.ThumbPath
+			result["thumb"] = "/thumbnails/" + content.ThumbPath
 		}
 	case models.ContentTypeLink:
 		result["url"] = content.Url
 		if content.ThumbPath != "" {
-			result["thumb"] = "http://" + c.Request.Host + "/thumbnails/" + content.ThumbPath
+			result["thumb"] = "/thumbnails/" + content.ThumbPath
 		}
 	}
 
@@ -1436,7 +1454,7 @@ func parsePaginationParams(c *gin.Context) (page int, pageSize int, offset int) 
 // @Router       /admin/files/clean [delete]
 func CleanOrphanedFiles(c *gin.Context) {
 	var allContents []models.Content
-	if err := utils.DB.Unscoped().Select("file_path", "thumb_path").Find(&allContents).Error; err != nil {
+	if err := utils.DB.Unscoped().Select("file_path", "thumb_path", "compressed_path").Find(&allContents).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code":    500,
 			"message": "获取文件列表失败",
@@ -1452,6 +1470,9 @@ func CleanOrphanedFiles(c *gin.Context) {
 		}
 		if content.ThumbPath != "" {
 			recordedFiles[content.ThumbPath] = true
+		}
+		if content.CompressedPath != "" {
+			recordedFiles[content.CompressedPath] = true
 		}
 	}
 
@@ -1487,6 +1508,7 @@ func CleanOrphanedFiles(c *gin.Context) {
 
 	cleanDir(uploadDir)
 	cleanDir(thumbDir)
+	cleanDir(filepath.Join(uploadDir, "..", "images"))
 
 	c.JSON(http.StatusOK, gin.H{
 		"code":    200,

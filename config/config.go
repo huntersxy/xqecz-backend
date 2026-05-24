@@ -47,6 +47,8 @@ type Config struct {
 	Recommend         RecommendConfig  `yaml:"recommend"`
 	MigrateThumbnails bool             `yaml:"migrate_thumbnails"`
 	InitAdmin         bool             `yaml:"init_admin"`
+	TinifyAPIKey  string `yaml:"tinify_api_key"`
+	TinifyEnabled bool   `yaml:"tinify_enabled"`
 }
 
 type RecommendConfig struct {
@@ -237,6 +239,9 @@ func GetDefaultConfig() *Config {
 			ExcludedTags: []string{"bot"},
 		},
 		MigrateThumbnails: true,
+		InitAdmin:         false,
+		TinifyAPIKey:  "",
+		TinifyEnabled: false,
 	}
 }
 
@@ -244,6 +249,7 @@ func EnsureDirectories() error {
 	dirs := []string{
 		AppConfig.Server.UploadDir,
 		AppConfig.Server.ThumbnailDir,
+		"./images",
 	}
 
 	for _, dir := range dirs {

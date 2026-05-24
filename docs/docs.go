@@ -2926,6 +2926,9 @@ const docTemplate = `{
                 "big_tag_id": {
                     "type": "integer"
                 },
+                "compressed_path": {
+                    "type": "string"
+                },
                 "content": {
                     "type": "string"
                 },
