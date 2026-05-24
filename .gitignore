@@ -16,6 +16,7 @@ images/
 .idea/
 *.swp
 *.swo
+opencode.json
 
 # OS
 .DS_Store
