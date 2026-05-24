@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/bytedance/sonic"
@@ -188,18 +189,101 @@ func loadBannedWords() []string {
 	return words
 }
 
-func defaultBannedList() []string {
-	return []string{"admin", "test", "sb", "fuck"}
+var bannedAutomaton *acAutomaton
+var bannedOnce sync.Once
+
+type acNode struct {
+	children map[rune]*acNode
+	fail     *acNode
+	output   bool
 }
 
-func checkWordsInList(text string, words []string) bool {
-	textLower := strings.ToLower(text)
-	for _, word := range words {
-		if strings.Contains(textLower, strings.ToLower(word)) {
+type acAutomaton struct {
+	root *acNode
+}
+
+func (ac *acAutomaton) insert(word string) {
+	cur := ac.root
+	for _, ch := range word {
+		if cur.children == nil {
+			cur.children = make(map[rune]*acNode)
+		}
+		if cur.children[ch] == nil {
+			cur.children[ch] = &acNode{}
+		}
+		cur = cur.children[ch]
+	}
+	cur.output = true
+}
+
+func (ac *acAutomaton) build() {
+	queue := make([]*acNode, 0)
+	for _, child := range ac.root.children {
+		child.fail = ac.root
+		queue = append(queue, child)
+	}
+	for len(queue) > 0 {
+		cur := queue[0]
+		queue = queue[1:]
+		for ch, child := range cur.children {
+			f := cur.fail
+			for f != nil && f.children != nil && f.children[ch] == nil {
+				f = f.fail
+			}
+			if f != nil && f.children != nil && f.children[ch] != nil {
+				child.fail = f.children[ch]
+			} else {
+				child.fail = ac.root
+			}
+			if child.fail.output {
+				child.output = true
+			}
+			queue = append(queue, child)
+		}
+	}
+}
+
+func (ac *acAutomaton) search(text string) bool {
+	cur := ac.root
+	for _, ch := range text {
+		for cur.children == nil || cur.children[ch] == nil {
+			if cur == ac.root {
+				break
+			}
+			if cur.fail == nil {
+				cur = ac.root
+				break
+			}
+			cur = cur.fail
+		}
+		if cur.children != nil && cur.children[ch] != nil {
+			cur = cur.children[ch]
+		}
+		if cur.output {
 			return true
 		}
 	}
 	return false
+}
+
+func getBannedAutomaton() *acAutomaton {
+	bannedOnce.Do(func() {
+		bannedAutomaton = &acAutomaton{root: &acNode{}}
+		words := loadBannedWords()
+		for _, w := range words {
+			bannedAutomaton.insert(strings.ToLower(w))
+		}
+		bannedAutomaton.build()
+	})
+	return bannedAutomaton
+}
+
+func defaultBannedList() []string {
+	return []string{"admin", "test", "sb", "fuck"}
+}
+
+func checkWordsInList(text string, _ []string) bool {
+	return getBannedAutomaton().search(strings.ToLower(text))
 }
 
 func asyncCheckSpamAPI(commentID uint, text string) {
