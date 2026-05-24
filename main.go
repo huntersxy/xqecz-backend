@@ -12,6 +12,7 @@
 package main
 
 import (
+	// embed is used for //go:embed directives to embed default cover image
 	_ "embed"
 	"fmt"
 	"log"

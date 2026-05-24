@@ -65,24 +65,7 @@ func generateRecommendList() {
 	key := utils.GetKey("recommend:zset:temp")
 
 	for _, content := range allContents {
-		score := 0.0
-
-		if content.CreatedAt.After(today) {
-			score += 100.0
-		} else {
-			daysAgo := time.Since(content.CreatedAt).Hours() / 24.0
-			if daysAgo < 7 {
-				score += 50.0 * (1 - daysAgo/7.0)
-			}
-		}
-
-		if vc, ok := viewCounts[content.ID]; ok {
-			score += float64(vc["1day"]) * 2.0
-			score += float64(vc["3day"]) * 1.0
-			score += float64(vc["7day"]) * 0.5
-			score += float64(vc["1month"]) * 0.2
-		}
-
+		score := calculateTimeScore(content, today) + calculateViewScore(viewCounts, content.ID)
 		pipe.ZAdd(context.Background(), key, &redis.Z{Score: score, Member: content.ID})
 	}
 
@@ -97,6 +80,34 @@ func generateRecommendList() {
 	}
 
 	log.Printf("[定时任务] 推荐列表更新完成，共%d条内容，耗时: %v", len(allContents), time.Since(startTime))
+}
+
+func calculateTimeScore(content models.Content, today time.Time) float64 {
+	score := 0.0
+
+	if content.CreatedAt.After(today) {
+		score += 100.0
+	} else {
+		daysAgo := time.Since(content.CreatedAt).Hours() / 24.0
+		if daysAgo < 7 {
+			score += 50.0 * (1 - daysAgo/7.0)
+		}
+	}
+
+	return score
+}
+
+func calculateViewScore(viewCounts map[uint]map[string]int64, contentID uint) float64 {
+	score := 0.0
+
+	if vc, ok := viewCounts[contentID]; ok {
+		score += float64(vc["1day"]) * 2.0
+		score += float64(vc["3day"]) * 1.0
+		score += float64(vc["7day"]) * 0.5
+		score += float64(vc["1month"]) * 0.2
+	}
+
+	return score
 }
 
 func StartTinifyScheduler() {

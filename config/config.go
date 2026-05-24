@@ -155,23 +155,35 @@ func mergeDefaults(dst, src reflect.Value, prefix string) {
 
 		switch df.Kind() {
 		case reflect.String:
-			if df.String() == "" && sf.String() != "" {
-				df.Set(sf)
-				log.Printf("[配置] %s 未配置，使用默认值: %s", path, sf.String())
-			}
+			setDefaultString(df, sf, path)
 		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-			if df.Int() == 0 && sf.Int() != 0 {
-				df.Set(sf)
-				log.Printf("[配置] %s 未配置，使用默认值: %d", path, sf.Int())
-			}
+			setDefaultInt(df, sf, path)
 		case reflect.Slice:
-			if df.IsNil() && !sf.IsNil() {
-				df.Set(sf)
-				log.Printf("[配置] %s 未配置，使用默认值", path)
-			}
+			setDefaultSlice(df, sf, path)
 		case reflect.Struct:
 			mergeDefaults(df, sf, path)
 		}
+	}
+}
+
+func setDefaultString(dst, src reflect.Value, path string) {
+	if dst.String() == "" && src.String() != "" {
+		dst.Set(src)
+		log.Printf("[配置] %s 未配置，使用默认值: %s", path, src.String())
+	}
+}
+
+func setDefaultInt(dst, src reflect.Value, path string) {
+	if dst.Int() == 0 && src.Int() != 0 {
+		dst.Set(src)
+		log.Printf("[配置] %s 未配置，使用默认值: %d", path, src.Int())
+	}
+}
+
+func setDefaultSlice(dst, src reflect.Value, path string) {
+	if dst.IsNil() && !src.IsNil() {
+		dst.Set(src)
+		log.Printf("[配置] %s 未配置，使用默认值", path)
 	}
 }
 

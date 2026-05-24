@@ -19,6 +19,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+const errInvalidContentID = "无效的内容ID"
+
 type CommentUser struct {
 	ID       uint   `json:"id"`
 	Username string `json:"username"`
@@ -80,7 +82,7 @@ func AddComment(c *gin.Context) {
 	contentIDStr := c.PostForm("content_id")
 	contentID, err := strconv.ParseUint(contentIDStr, 10, 32)
 	if err != nil || contentID == 0 {
-		utils.RespondWithError(c, http.StatusBadRequest, "无效的内容ID")
+		utils.RespondWithError(c, http.StatusBadRequest, errInvalidContentID)
 		return
 	}
 
@@ -226,20 +228,24 @@ func (ac *acAutomaton) build() {
 		cur := queue[0]
 		queue = queue[1:]
 		for ch, child := range cur.children {
-			f := cur.fail
-			for f != nil && f.children != nil && f.children[ch] == nil {
-				f = f.fail
-			}
-			if f != nil && f.children != nil && f.children[ch] != nil {
-				child.fail = f.children[ch]
-			} else {
-				child.fail = ac.root
-			}
-			if child.fail.output {
-				child.output = true
-			}
+			ac.processChild(cur, child, ch)
 			queue = append(queue, child)
 		}
+	}
+}
+
+func (ac *acAutomaton) processChild(cur, child *acNode, ch rune) {
+	f := cur.fail
+	for f != nil && f.children != nil && f.children[ch] == nil {
+		f = f.fail
+	}
+	if f != nil && f.children != nil && f.children[ch] != nil {
+		child.fail = f.children[ch]
+	} else {
+		child.fail = ac.root
+	}
+	if child.fail.output {
+		child.output = true
 	}
 }
 
@@ -321,75 +327,26 @@ func asyncCheckSpamAPI(commentID uint, text string) {
 	}
 }
 
-// GetComments 评论列表
-// @Summary      评论列表
-// @Description  获取指定内容的评论列表（嵌套回复，分页）
-// @Tags         评论
-// @Produce      json
-// @Param        content_id path int true "内容ID"
-// @Param        page      query int false "页码" default(1)
-// @Param        page_size query int false "每页数量" default(20)
-// @Success      200 {object} utils.SwaggerResponse{data=object{list=[]models.Comment,total=int,page=int,page_size=int,total_page=int}}
-// @Router       /comment/list/{content_id} [get]
-func GetComments(c *gin.Context) {
+func parseCommentPagination(c *gin.Context) (page, pageSize int, contentID uint, err error) {
 	contentIDStr := c.Param("content_id")
-	contentID, err := strconv.ParseUint(contentIDStr, 10, 32)
-	if err != nil {
-		utils.RespondWithError(c, http.StatusBadRequest, "无效的内容ID")
-		return
+	parsed, parseErr := strconv.ParseUint(contentIDStr, 10, 32)
+	if parseErr != nil {
+		return 0, 0, 0, fmt.Errorf(errInvalidContentID)
 	}
+	contentID = uint(parsed)
 
-	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
+	page, _ = strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ = strconv.Atoi(c.DefaultQuery("page_size", "20"))
 	if page < 1 {
 		page = 1
 	}
 	if pageSize < 1 {
 		pageSize = 20
 	}
+	return page, pageSize, contentID, nil
+}
 
-	var total int64
-	query := utils.DB.Model(&models.Comment{}).Where("content_id = ? AND parent_id IS NULL AND is_banned = ?", contentID, false)
-	if err := query.Count(&total).Error; err != nil {
-		utils.RespondWithError(c, http.StatusInternalServerError, "获取评论失败")
-		return
-	}
-
-	var comments []models.Comment
-	offset := (page - 1) * pageSize
-	cacheKey := fmt.Sprintf("comments:%s:page:%d:size:%d", contentIDStr, page, pageSize)
-
-	if utils.RedisClient != nil {
-		var cached CommentListResponse
-		if err := utils.GetCacheJSON(cacheKey, &cached); err == nil {
-			utils.RespondWithSuccess(c, cached)
-			return
-		}
-	}
-
-	if err := query.
-		Preload("User").
-		Order("created_at DESC").
-		Limit(pageSize).
-		Offset(offset).
-		Find(&comments).Error; err != nil {
-		utils.RespondWithError(c, http.StatusInternalServerError, "获取评论失败")
-		return
-	}
-
-	var allCommentIDs []uint
-	commentIDMap := make(map[uint]models.Comment)
-	for _, cmt := range comments {
-		allCommentIDs = append(allCommentIDs, cmt.ID)
-		commentIDMap[cmt.ID] = cmt
-	}
-
-	var allReplies []models.Comment
-	utils.DB.Where("content_id = ? AND parent_id IS NOT NULL AND is_banned = ?", contentID, false).
-		Preload("User").
-		Order("created_at ASC").
-		Find(&allReplies)
-
+func buildReplyMap(allReplies []models.Comment, commentIDMap map[uint]models.Comment) map[uint][]CommentReply {
 	replyMap := make(map[uint]models.Comment)
 	for _, reply := range allReplies {
 		replyMap[reply.ID] = reply
@@ -428,6 +385,67 @@ func GetComments(c *gin.Context) {
 			}
 		}
 	}
+	return commentRepliesMap
+}
+
+// GetComments 评论列表
+// @Summary      评论列表
+// @Description  获取指定内容的评论列表（嵌套回复，分页）
+// @Tags         评论
+// @Produce      json
+// @Param        content_id path int true "内容ID"
+// @Param        page      query int false "页码" default(1)
+// @Param        page_size query int false "每页数量" default(20)
+// @Success      200 {object} utils.SwaggerResponse{data=object{list=[]models.Comment,total=int,page=int,page_size=int,total_page=int}}
+// @Router       /comment/list/{content_id} [get]
+func GetComments(c *gin.Context) {
+	page, pageSize, contentID, err := parseCommentPagination(c)
+	if err != nil {
+		utils.RespondWithError(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	var total int64
+	query := utils.DB.Model(&models.Comment{}).Where("content_id = ? AND parent_id IS NULL AND is_banned = ?", contentID, false)
+	if err := query.Count(&total).Error; err != nil {
+		utils.RespondWithError(c, http.StatusInternalServerError, "获取评论失败")
+		return
+	}
+
+	var comments []models.Comment
+	offset := (page - 1) * pageSize
+	cacheKey := fmt.Sprintf("comments:%d:page:%d:size:%d", contentID, page, pageSize)
+
+	if utils.RedisClient != nil {
+		var cached CommentListResponse
+		if err := utils.GetCacheJSON(cacheKey, &cached); err == nil {
+			utils.RespondWithSuccess(c, cached)
+			return
+		}
+	}
+
+	if err := query.
+		Preload("User").
+		Order("created_at DESC").
+		Limit(pageSize).
+		Offset(offset).
+		Find(&comments).Error; err != nil {
+		utils.RespondWithError(c, http.StatusInternalServerError, "获取评论失败")
+		return
+	}
+
+	commentIDMap := make(map[uint]models.Comment)
+	for _, cmt := range comments {
+		commentIDMap[cmt.ID] = cmt
+	}
+
+	var allReplies []models.Comment
+	utils.DB.Where("content_id = ? AND parent_id IS NOT NULL AND is_banned = ?", contentID, false).
+		Preload("User").
+		Order("created_at ASC").
+		Find(&allReplies)
+
+	commentRepliesMap := buildReplyMap(allReplies, commentIDMap)
 
 	result := CommentListResponse{
 		List:      make([]CommentItem, 0, len(comments)),
@@ -538,7 +556,7 @@ func GetCommentCount(c *gin.Context) {
 	contentIDStr := c.Param("content_id")
 	contentID, err := strconv.ParseUint(contentIDStr, 10, 32)
 	if err != nil {
-		utils.RespondWithError(c, http.StatusBadRequest, "无效的内容ID")
+		utils.RespondWithError(c, http.StatusBadRequest, errInvalidContentID)
 		return
 	}
 

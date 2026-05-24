@@ -17,7 +17,13 @@ import (
 	"xiaoquan-backend/config"
 )
 
-const DefaultCoverFilename = "dy.webp"
+const (
+	DefaultCoverFilename = "dy.webp"
+
+	errCreateRequest = "创建请求失败: %w"
+	headerUserAgent  = "User-Agent"
+	userAgentValue   = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+)
 
 type VideoPlatform string
 
@@ -134,9 +140,9 @@ func fetchBilibiliInfo(bvid string) (*VideoInfo, error) {
 
 	req, err := http.NewRequest("GET", apiURL, nil)
 	if err != nil {
-		return nil, fmt.Errorf("创建请求失败: %w", err)
+		return nil, fmt.Errorf(errCreateRequest, err)
 	}
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+	req.Header.Set(headerUserAgent, userAgentValue)
 	req.Header.Set("Referer", "https://www.bilibili.com")
 
 	resp, err := httpClient.Do(req)
@@ -185,9 +191,9 @@ func fetchDouyinInfo(videoID string) (*VideoInfo, error) {
 
 	req, err := http.NewRequest("GET", apiURL, nil)
 	if err != nil {
-		return nil, fmt.Errorf("创建请求失败: %w", err)
+		return nil, fmt.Errorf(errCreateRequest, err)
 	}
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+	req.Header.Set(headerUserAgent, userAgentValue)
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
@@ -242,9 +248,9 @@ func fetchYouTubeInfo(videoID string) (*VideoInfo, error) {
 
 	req, err := http.NewRequest("GET", apiURL, nil)
 	if err != nil {
-		return nil, fmt.Errorf("创建请求失败: %w", err)
+		return nil, fmt.Errorf(errCreateRequest, err)
 	}
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+	req.Header.Set(headerUserAgent, userAgentValue)
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
@@ -296,7 +302,7 @@ func DownloadCover(coverURL string, userID uint, fallback bool) (string, error) 
 	if err != nil {
 		return DefaultCoverFilename, nil
 	}
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+	req.Header.Set(headerUserAgent, userAgentValue)
 	req.Header.Set("Referer", coverURL)
 
 	resp, err := httpClient.Do(req)
