@@ -956,11 +956,7 @@ func DeleteContent(c *gin.Context) {
 func SearchContent(c *gin.Context) {
 	keyword := c.Query("keyword")
 	if keyword == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"code":    400,
-			"message": "请输入搜索关键词",
-			"data":    nil,
-		})
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "请输入搜索关键词", "data": nil})
 		return
 	}
 
@@ -970,35 +966,26 @@ func SearchContent(c *gin.Context) {
 	query := utils.DB.Model(&models.Content{}).Where(sqlAuditStatus, models.AuditStatusApproved).
 		Where("title LIKE ? OR content LIKE ?", "%"+keyword+"%", "%"+keyword+"%")
 
-	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
-	if page < 1 {
-		page = 1
-	}
-	if pageSize < 1 {
-		pageSize = 20
-	}
-	if pageSize > 100 {
-		pageSize = 100
-	}
-	offset := (page - 1) * pageSize
+	page, pageSize, offset := parsePaginationParams(c)
 
 	query.Count(&total)
 
-	query = query.Preload("User").
-		Order(sqlOrderCreated).Limit(pageSize).Offset(offset)
+	query = query.Preload("User").Order(sqlOrderCreated).Limit(pageSize).Offset(offset)
 
 	if err := query.Find(&contents).Error; err != nil {
 		utils.RespondWithError(c, http.StatusInternalServerError, "搜索失败")
 		return
 	}
 
+	respondContentSearch(c, contents, total, page, pageSize)
+}
+
+func respondContentSearch(c *gin.Context, contents []models.Content, total int64, page, pageSize int) {
 	results := make([]gin.H, 0, len(contents))
 	for _, content := range contents {
-		result := buildContentSummary(c, content)
-		results = append(results, result)
+		results = append(results, buildContentSummary(c, content))
 	}
-
+	totalPage := (total + int64(pageSize) - 1) / int64(pageSize)
 	c.JSON(http.StatusOK, gin.H{
 		"code":    200,
 		"message": "搜索成功",
@@ -1007,7 +994,7 @@ func SearchContent(c *gin.Context) {
 			"total":      total,
 			"page":       page,
 			"page_size":  pageSize,
-			"total_page": (total + int64(pageSize) - 1) / int64(pageSize),
+			"total_page": totalPage,
 		},
 	})
 }
