@@ -35,6 +35,15 @@ const (
 	thumbnailPath   = "/thumbnails/"
 )
 
+func requireUser(c *gin.Context) (models.User, bool) {
+	user, exists := c.Get("user")
+	if !exists {
+		utils.RespondWithError(c, http.StatusUnauthorized, "未登录")
+		return models.User{}, false
+	}
+	return user.(models.User), true
+}
+
 type httpError struct {
 	code    int
 	message string
@@ -55,12 +64,10 @@ func (e *httpError) Error() string { return e.message }
 // @Failure      401 {object} utils.SwaggerResponse
 // @Router       /content/upload-image [post]
 func UploadArticleImage(c *gin.Context) {
-	user, exists := c.Get("user")
-	if !exists {
-		utils.RespondWithError(c, http.StatusUnauthorized, "未登录")
+	currentUser, ok := requireUser(c)
+	if !ok {
 		return
 	}
-	currentUser := user.(models.User)
 
 	file, err := c.FormFile("file")
 	if err != nil {
@@ -123,12 +130,10 @@ type UploadRequest struct {
 // @Failure      403 {object} utils.SwaggerResponse
 // @Router       /content/upload [post]
 func UploadContent(c *gin.Context) {
-	user, exists := c.Get("user")
-	if !exists {
-		utils.RespondWithError(c, http.StatusUnauthorized, "未登录")
+	currentUser, ok := requireUser(c)
+	if !ok {
 		return
 	}
-	currentUser := user.(models.User)
 
 	var req UploadRequest
 	if err := c.ShouldBind(&req); err != nil {
@@ -383,12 +388,10 @@ func applyContentListFilters(query *gorm.DB, c *gin.Context) *gorm.DB {
 // @Failure      401 {object} utils.SwaggerResponse
 // @Router       /content/my [get]
 func GetMyContentList(c *gin.Context) {
-	user, exists := c.Get("user")
-	if !exists {
-		utils.RespondWithError(c, http.StatusUnauthorized, "未登录")
+	u, ok := requireUser(c)
+	if !ok {
 		return
 	}
-	u := user.(models.User)
 
 	var contents []models.Content
 	var total int64
@@ -537,12 +540,10 @@ func UpdateContent(c *gin.Context) {
 		return
 	}
 
-	user, exists := c.Get("user")
-	if !exists {
-		utils.RespondWithError(c, http.StatusUnauthorized, "未登录")
+	currentUser, ok := requireUser(c)
+	if !ok {
 		return
 	}
-	currentUser := user.(models.User)
 	if !currentUser.IsAdmin && content.UserID != currentUser.ID {
 		utils.RespondWithError(c, http.StatusForbidden, "无权修改此内容")
 		return
@@ -762,13 +763,11 @@ func DeleteContent(c *gin.Context) {
 		return
 	}
 
-	user, exists := c.Get("user")
-	if !exists {
-		utils.RespondWithError(c, http.StatusUnauthorized, "未登录")
+	currentUser, ok := requireUser(c)
+	if !ok {
 		return
 	}
 
-	currentUser := user.(models.User)
 	if !currentUser.IsAdmin && content.UserID != currentUser.ID {
 		utils.RespondWithError(c, http.StatusForbidden, "无权删除此内容")
 		return
@@ -1351,12 +1350,10 @@ func PurgeDeletedContent(c *gin.Context) {
 // @Failure      409 {object} utils.SwaggerResponse
 // @Router       /content/{content_id}/claim [post]
 func CreateClaim(c *gin.Context) {
-	user, exists := c.Get("user")
-	if !exists {
-		utils.RespondWithError(c, http.StatusUnauthorized, "未登录")
+	currentUser, ok := requireUser(c)
+	if !ok {
 		return
 	}
-	currentUser := user.(models.User)
 
 	contentID := c.Param("content_id")
 	var content models.Content
@@ -1501,12 +1498,10 @@ func HandleClaim(c *gin.Context) {
 		return
 	}
 
-	admin, exists := c.Get("user")
-	if !exists {
-		utils.RespondWithError(c, http.StatusUnauthorized, "未登录")
+	currentAdmin, ok := requireUser(c)
+	if !ok {
 		return
 	}
-	currentAdmin := admin.(models.User)
 
 	var req struct {
 		Action string `json:"action" binding:"required"`

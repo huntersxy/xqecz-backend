@@ -168,14 +168,8 @@ func Logout(c *gin.Context) {
 // GetMe 获取当前登录用户信息
 // 从请求上下文获取已通过AuthMiddleware验证的用户信息
 func GetMe(c *gin.Context) {
-	user, exists := c.Get("user")
-	if !exists {
-		utils.RespondWithError(c, http.StatusUnauthorized, "未登录")
-		return
-	}
-	u, ok := user.(models.User)
+	u, ok := requireUser(c)
 	if !ok {
-		utils.RespondWithError(c, http.StatusInternalServerError, "用户信息错误")
 		return
 	}
 	utils.RespondWithSuccess(c, gin.H{

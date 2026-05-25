@@ -72,12 +72,10 @@ type CommentListResponse struct {
 // @Failure      401 {object} utils.SwaggerResponse
 // @Router       /comment/add [post]
 func AddComment(c *gin.Context) {
-	user, exists := c.Get("user")
-	if !exists {
-		utils.RespondWithError(c, http.StatusUnauthorized, "未登录")
+	currentUser, ok := requireUser(c)
+	if !ok {
 		return
 	}
-	currentUser := user.(models.User)
 
 	contentIDStr := c.PostForm("content_id")
 	contentID, err := strconv.ParseUint(contentIDStr, 10, 32)
@@ -503,12 +501,10 @@ func toReplyItem(c models.Comment) CommentReply {
 // @Failure      404 {object} utils.SwaggerResponse
 // @Router       /comment/{id} [delete]
 func DeleteComment(c *gin.Context) {
-	user, exists := c.Get("user")
-	if !exists {
-		utils.RespondWithError(c, http.StatusUnauthorized, "未登录")
+	currentUser, ok := requireUser(c)
+	if !ok {
 		return
 	}
-	currentUser := user.(models.User)
 
 	commentIDStr := c.Param("id")
 	commentID, err := strconv.ParseUint(commentIDStr, 10, 32)
@@ -582,12 +578,10 @@ func GetCommentCount(c *gin.Context) {
 // @Failure      401 {object} utils.SwaggerResponse
 // @Router       /comment/report [post]
 func ReportComment(c *gin.Context) {
-	user, exists := c.Get("user")
-	if !exists {
-		utils.RespondWithError(c, http.StatusUnauthorized, "未登录")
+	currentUser, ok := requireUser(c)
+	if !ok {
 		return
 	}
-	currentUser := user.(models.User)
 
 	commentIDStr := c.PostForm("comment_id")
 	commentID, err := strconv.ParseUint(commentIDStr, 10, 32)
