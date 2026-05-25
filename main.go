@@ -258,5 +258,3 @@ func isOriginAllowed(origin string) bool {
 	}
 	return false
 }
-
-

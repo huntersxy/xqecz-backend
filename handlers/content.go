@@ -23,11 +23,8 @@ import (
 )
 
 const (
-	DefaultPageSize = 20
-	MaxPageSize    = 100
-	MaxRecommendCount = 50
-	CacheDuration5Min = 5 * time.Minute
-	CacheDuration1Hour = 1 * time.Hour
+	MaxRecommendCount   = 50
+	CacheDuration1Hour  = 1 * time.Hour
 	CacheDuration12Hour = 12 * time.Hour
 )
 
@@ -128,7 +125,7 @@ type UploadRequest struct {
 func UploadContent(c *gin.Context) {
 	user, exists := c.Get("user")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"code": 401, "message": "未登录", "data": nil})
+		utils.RespondWithError(c, http.StatusUnauthorized, "未登录")
 		return
 	}
 	currentUser := user.(models.User)
@@ -270,15 +267,20 @@ func GetContentList(c *gin.Context) {
 	var contents []models.Content
 	var total int64
 
+	sortBy := c.DefaultQuery("sort_by", "created_at")
+	order := c.DefaultQuery("order", "desc")
+	page, pageSize, offset := utils.ParsePagination(c, utils.DefaultPageSize, utils.MaxPageSize)
+	orderStr := utils.BuildSortClause(c)
+
 	cacheParams := map[string]string{
 		"audit_status": c.Query("audit_status"),
 		"tag":          c.Query("tag"),
 		"type":         c.Query("type"),
 		"keyword":      c.Query("keyword"),
-		"sort_by":      c.DefaultQuery("sort_by", "created_at"),
-		"order":        c.DefaultQuery("order", "desc"),
-		"page":         c.DefaultQuery("page", "1"),
-		"page_size":    c.DefaultQuery("page_size", fmt.Sprintf("%d", DefaultPageSize)),
+		"sort_by":      sortBy,
+		"order":        order,
+		"page":         strconv.Itoa(page),
+		"page_size":    strconv.Itoa(pageSize),
 	}
 	cacheKey := generateSortedCacheKey("content_list:", cacheParams)
 
@@ -301,12 +303,6 @@ func GetContentList(c *gin.Context) {
 	}
 
 	query := applyContentListFilters(utils.DB.Model(&models.Content{}), c)
-
-	sortBy := c.DefaultQuery("sort_by", "created_at")
-	order := c.DefaultQuery("order", "desc")
-	orderStr := validateSortParams(sortBy, order)
-
-	page, pageSize, offset := parsePaginationParams(c)
 
 	query.Count(&total)
 
@@ -386,20 +382,6 @@ func applyContentListFilters(query *gorm.DB, c *gin.Context) *gorm.DB {
 	return query
 }
 
-func validateSortParams(sortBy, order string) string {
-	sortCol := "created_at"
-	if sortBy == "updated_at" {
-		sortCol = "updated_at"
-	} else if sortBy == "id" {
-		sortCol = "id"
-	}
-	sortOrder := "desc"
-	if order == "asc" {
-		sortOrder = "asc"
-	}
-	return sortCol + " " + sortOrder
-}
-
 // GetMyContentList 获取我的内容列表
 // @Summary      我的内容
 // @Description  获取当前登录用户的内容列表
@@ -415,30 +397,10 @@ func validateSortParams(sortBy, order string) string {
 // @Success      200 {object} utils.SwaggerResponse{data=object{list=[]models.Content,total=int,page=int,page_size=int,total_page=int}}
 // @Failure      401 {object} utils.SwaggerResponse
 // @Router       /content/my [get]
-func parsePagination(c *gin.Context) (page, pageSize, offset int) {
-	page, _ = strconv.Atoi(c.DefaultQuery("page", "1"))
-	pageSize, _ = strconv.Atoi(c.DefaultQuery("page_size", "20"))
-	if page < 1 {
-		page = 1
-	}
-	if pageSize < 1 {
-		pageSize = 20
-	}
-	if pageSize > 100 {
-		pageSize = 100
-	}
-	offset = (page - 1) * pageSize
-	return
-}
-
 func GetMyContentList(c *gin.Context) {
 	user, exists := c.Get("user")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"code":    401,
-			"message": "未登录",
-			"data":    nil,
-		})
+		utils.RespondWithError(c, http.StatusUnauthorized, "未登录")
 		return
 	}
 	u := user.(models.User)
@@ -468,19 +430,8 @@ func GetMyContentList(c *gin.Context) {
 		query = query.Where(sqlAuditStatus, auditStatus)
 	}
 
-	sortBy := c.DefaultQuery("sort_by", "created_at")
-	order := c.DefaultQuery("order", "desc")
-	validSortFields := map[string]bool{"created_at": true, "updated_at": true, "id": true}
-	validOrders := map[string]bool{"asc": true, "desc": true}
-	if !validSortFields[sortBy] {
-		sortBy = "created_at"
-	}
-	if !validOrders[order] {
-		order = "desc"
-	}
-	orderStr := sortBy + " " + order
-
-	page, pageSize, offset := parsePagination(c)
+	orderStr := utils.BuildSortClause(c)
+	page, pageSize, offset := utils.ParsePagination(c, utils.DefaultPageSize, utils.MaxPageSize)
 
 	query.Count(&total)
 
@@ -488,11 +439,7 @@ func GetMyContentList(c *gin.Context) {
 		Order(orderStr).Limit(pageSize).Offset(offset)
 
 	if err := query.Find(&contents).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"code":    500,
-			"message": "failed to get contents",
-			"data":    nil,
-		})
+		utils.RespondWithError(c, http.StatusInternalServerError, "failed to get contents")
 		return
 	}
 
@@ -543,16 +490,12 @@ func GetContent(c *gin.Context) {
 	}
 
 	if err := utils.DB.Preload("User").First(&content, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{
-			"code":    404,
-			"message": "content not found",
-			"data":    nil,
-		})
+		utils.RespondWithError(c, http.StatusNotFound, "content not found")
 		return
 	}
 
 	if utils.RedisClient != nil {
-		utils.SetCacheJSON(cacheKey, content, 12*time.Hour)
+		utils.SetCacheJSON(cacheKey, content, CacheDuration12Hour)
 	}
 
 	go func() {
@@ -605,18 +548,18 @@ func UpdateContent(c *gin.Context) {
 	var content models.Content
 
 	if err := utils.DB.First(&content, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"code": 404, "message": "内容不存在", "data": nil})
+		utils.RespondWithError(c, http.StatusNotFound, "内容不存在")
 		return
 	}
 
 	user, exists := c.Get("user")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"code": 401, "message": "未登录", "data": nil})
+		utils.RespondWithError(c, http.StatusUnauthorized, "未登录")
 		return
 	}
 	currentUser := user.(models.User)
 	if !currentUser.IsAdmin && content.UserID != currentUser.ID {
-		c.JSON(http.StatusForbidden, gin.H{"code": 403, "message": "无权修改此内容", "data": nil})
+		utils.RespondWithError(c, http.StatusForbidden, "无权修改此内容")
 		return
 	}
 
@@ -634,7 +577,7 @@ func UpdateContent(c *gin.Context) {
 	content.AuditStatus = models.AuditStatusPending
 
 	if err := utils.DB.Save(&content).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "更新失败", "data": nil})
+		utils.RespondWithError(c, http.StatusInternalServerError, "更新失败")
 		return
 	}
 
@@ -781,39 +724,23 @@ func RegenerateVideoThumbnail(c *gin.Context) {
 	var content models.Content
 
 	if err := utils.DB.First(&content, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{
-			"code":    404,
-			"message": "内容不存在",
-			"data":    nil,
-		})
+		utils.RespondWithError(c, http.StatusNotFound, "内容不存在")
 		return
 	}
 
 	if content.Type != models.ContentTypeVideo {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"code":    400,
-			"message": "仅支持视频内容",
-			"data":    nil,
-		})
+		utils.RespondWithError(c, http.StatusBadRequest, "仅支持视频内容")
 		return
 	}
 
 	if content.FilePath == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"code":    400,
-			"message": "视频文件不存在",
-			"data":    nil,
-		})
+		utils.RespondWithError(c, http.StatusBadRequest, "视频文件不存在")
 		return
 	}
 
 	videoPath := filepath.Join(config.AppConfig.Server.UploadDir, content.FilePath)
 	if _, err := os.Stat(videoPath); os.IsNotExist(err) {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"code":    400,
-			"message": "视频文件不存在",
-			"data":    nil,
-		})
+		utils.RespondWithError(c, http.StatusBadRequest, "视频文件不存在")
 		return
 	}
 
@@ -836,11 +763,7 @@ func RegenerateVideoThumbnail(c *gin.Context) {
 
 	content.ThumbPath = thumbFilename
 	if err := utils.DB.Save(&content).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"code":    500,
-			"message": "更新失败",
-			"data":    nil,
-		})
+		utils.RespondWithError(c, http.StatusInternalServerError, "更新失败")
 		return
 	}
 
@@ -871,31 +794,19 @@ func DeleteContent(c *gin.Context) {
 	var content models.Content
 
 	if err := utils.DB.First(&content, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{
-			"code":    404,
-			"message": "内容不存在",
-			"data":    nil,
-		})
+		utils.RespondWithError(c, http.StatusNotFound, "内容不存在")
 		return
 	}
 
 	user, exists := c.Get("user")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"code":    401,
-			"message": "未登录",
-			"data":    nil,
-		})
+		utils.RespondWithError(c, http.StatusUnauthorized, "未登录")
 		return
 	}
 
 	currentUser := user.(models.User)
 	if !currentUser.IsAdmin && content.UserID != currentUser.ID {
-		c.JSON(http.StatusForbidden, gin.H{
-			"code":    403,
-			"message": "无权删除此内容",
-			"data":    nil,
-		})
+		utils.RespondWithError(c, http.StatusForbidden, "无权删除此内容")
 		return
 	}
 
@@ -925,11 +836,7 @@ func DeleteContent(c *gin.Context) {
 	utils.DB.Where(sqlContentID, content.ID).Delete(&models.Comment{})
 
 	if err := utils.DB.Unscoped().Delete(&content).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"code":    500,
-			"message": "删除失败",
-			"data":    nil,
-		})
+		utils.RespondWithError(c, http.StatusInternalServerError, "删除失败")
 		return
 	}
 
@@ -956,7 +863,7 @@ func DeleteContent(c *gin.Context) {
 func SearchContent(c *gin.Context) {
 	keyword := c.Query("keyword")
 	if keyword == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "请输入搜索关键词", "data": nil})
+		utils.RespondWithError(c, http.StatusBadRequest, "请输入搜索关键词")
 		return
 	}
 
@@ -966,7 +873,7 @@ func SearchContent(c *gin.Context) {
 	query := utils.DB.Model(&models.Content{}).Where(sqlAuditStatus, models.AuditStatusApproved).
 		Where("title LIKE ? OR content LIKE ?", "%"+keyword+"%", "%"+keyword+"%")
 
-	page, pageSize, offset := parsePaginationParams(c)
+	page, pageSize, offset := utils.ParsePagination(c, utils.DefaultPageSize, utils.MaxPageSize)
 
 	query.Count(&total)
 
@@ -1037,7 +944,7 @@ func RecommendContent(c *gin.Context) {
 
 	results := make([]gin.H, 0, len(result))
 	for _, content := range result {
-		results = append(results, buildContentResponse(c, content))
+		results = append(results, buildContentDetail(c, content))
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -1121,11 +1028,7 @@ func getRecommendFromZSet(contentIDs []string) ([]models.Content, error) {
 func GetAllTags(c *gin.Context) {
 	var contents []models.Content
 	if err := utils.DB.Select("tags").Find(&contents).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"code":    500,
-			"message": "获取标签失败",
-			"data":    nil,
-		})
+		utils.RespondWithError(c, http.StatusInternalServerError, "获取标签失败")
 		return
 	}
 
@@ -1192,11 +1095,7 @@ func UpdateContentAuthor(c *gin.Context) {
 	var content models.Content
 
 	if err := utils.DB.First(&content, contentID).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{
-			"code":    404,
-			"message": "内容不存在",
-			"data":    nil,
-		})
+		utils.RespondWithError(c, http.StatusNotFound, "内容不存在")
 		return
 	}
 
@@ -1205,21 +1104,13 @@ func UpdateContentAuthor(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"code":    400,
-			"message": "请提供有效的用户ID",
-			"data":    nil,
-		})
+		utils.RespondWithError(c, http.StatusBadRequest, "请提供有效的用户ID")
 		return
 	}
 
 	var user models.User
 	if err := utils.DB.First(&user, req.UserID).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{
-			"code":    404,
-			"message": "目标用户不存在",
-			"data":    nil,
-		})
+		utils.RespondWithError(c, http.StatusNotFound, "目标用户不存在")
 		return
 	}
 
@@ -1227,11 +1118,7 @@ func UpdateContentAuthor(c *gin.Context) {
 	content.UserID = req.UserID
 
 	if err := utils.DB.Save(&content).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"code":    500,
-			"message": "更新失败",
-			"data":    nil,
-		})
+		utils.RespondWithError(c, http.StatusInternalServerError, "更新失败")
 		return
 	}
 
@@ -1306,11 +1193,6 @@ func setLinkFields(result gin.H, content models.Content) {
 		result["thumb"] = thumbnailPath + content.ThumbPath
 	}
 }
-
-func buildContentResponse(c *gin.Context, content models.Content) gin.H {
-	return buildContentDetail(c, content)
-}
-
 func buildContentDetail(c *gin.Context, content models.Content) gin.H {
 	result := gin.H{
 		"id":           content.ID,
@@ -1390,24 +1272,6 @@ func generateSortedCacheKey(prefix string, params map[string]string) string {
 	return prefix + strings.Join(parts, "&")
 }
 
-func parsePaginationParams(c *gin.Context) (page int, pageSize int, offset int) {
-	page, _ = strconv.Atoi(c.DefaultQuery("page", "1"))
-	pageSize, _ = strconv.Atoi(c.DefaultQuery("page_size", fmt.Sprintf("%d", DefaultPageSize)))
-
-	if page < 1 {
-		page = 1
-	}
-	if pageSize < 1 {
-		pageSize = DefaultPageSize
-	}
-	if pageSize > MaxPageSize {
-		pageSize = MaxPageSize
-	}
-
-	offset = (page - 1) * pageSize
-	return
-}
-
 // CleanOrphanedFiles 清理孤立文件
 // @Summary      清理孤立文件
 // @Description  管理员清理未被任何内容引用的上传文件和缩略图
@@ -1420,11 +1284,7 @@ func parsePaginationParams(c *gin.Context) (page int, pageSize int, offset int) 
 func CleanOrphanedFiles(c *gin.Context) {
 	var allContents []models.Content
 	if err := utils.DB.Unscoped().Select("file_path", "thumb_path", "compressed_path").Find(&allContents).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"code":    500,
-			"message": "获取文件列表失败",
-			"data":    nil,
-		})
+		utils.RespondWithError(c, http.StatusInternalServerError, "获取文件列表失败")
 		return
 	}
 
@@ -1529,11 +1389,7 @@ func PurgeDeletedContent(c *gin.Context) {
 func CreateClaim(c *gin.Context) {
 	user, exists := c.Get("user")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"code":    401,
-			"message": "未登录",
-			"data":    nil,
-		})
+		utils.RespondWithError(c, http.StatusUnauthorized, "未登录")
 		return
 	}
 	currentUser := user.(models.User)
@@ -1541,30 +1397,18 @@ func CreateClaim(c *gin.Context) {
 	contentID := c.Param("content_id")
 	var content models.Content
 	if err := utils.DB.First(&content, contentID).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{
-			"code":    404,
-			"message": "内容不存在",
-			"data":    nil,
-		})
+		utils.RespondWithError(c, http.StatusNotFound, "内容不存在")
 		return
 	}
 
 	if content.UserID == currentUser.ID {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"code":    400,
-			"message": "不能认领自己的内容",
-			"data":    nil,
-		})
+		utils.RespondWithError(c, http.StatusBadRequest, "不能认领自己的内容")
 		return
 	}
 
 	var existingClaim models.Claim
 	if err := utils.DB.Where("content_id = ? AND user_id = ? AND status = ?", content.ID, currentUser.ID, models.ClaimStatusPending).First(&existingClaim).Error; err == nil {
-		c.JSON(http.StatusConflict, gin.H{
-			"code":    409,
-			"message": "您已提交过该内容的认领申请",
-			"data":    nil,
-		})
+		utils.RespondWithError(c, http.StatusConflict, "您已提交过该内容的认领申请")
 		return
 	}
 
@@ -1572,11 +1416,7 @@ func CreateClaim(c *gin.Context) {
 		Reason string `json:"reason"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"code":    400,
-			"message": "请提供认领理由",
-			"data":    nil,
-		})
+		utils.RespondWithError(c, http.StatusBadRequest, "请提供认领理由")
 		return
 	}
 
@@ -1588,11 +1428,7 @@ func CreateClaim(c *gin.Context) {
 	}
 
 	if err := utils.DB.Create(claim).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"code":    500,
-			"message": "提交失败",
-			"data":    nil,
-		})
+		utils.RespondWithError(c, http.StatusInternalServerError, "提交失败")
 		return
 	}
 
@@ -1636,24 +1472,20 @@ func GetClaimList(c *gin.Context) {
 	var total int64
 	query.Count(&total)
 
-	page, pageSize, offset := parsePaginationParams(c)
+	page, pageSize, offset := utils.ParsePagination(c, utils.DefaultPageSize, utils.MaxPageSize)
 
 	query = query.Order(sqlOrderCreated).Limit(pageSize).Offset(offset)
 	if err := query.Find(&claims).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"code":    500,
-			"message": "获取失败",
-			"data":    nil,
-		})
+		utils.RespondWithError(c, http.StatusInternalServerError, "获取失败")
 		return
 	}
 
 	claimList := make([]gin.H, 0, len(claims))
 	for _, claim := range claims {
 		item := gin.H{
-			"id":         claim.ID,
-			"reason":     claim.Reason,
-			"status":     claim.Status,
+			"id":     claim.ID,
+			"reason": claim.Reason,
+			"status": claim.Status,
 			"user": gin.H{
 				"id":       claim.User.ID,
 				"username": claim.User.Username,
@@ -1696,30 +1528,18 @@ func HandleClaim(c *gin.Context) {
 	claimID := c.Param("id")
 	var claim models.Claim
 	if err := utils.DB.Preload("Content").First(&claim, claimID).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{
-			"code":    404,
-			"message": "认领申请不存在",
-			"data":    nil,
-		})
+		utils.RespondWithError(c, http.StatusNotFound, "认领申请不存在")
 		return
 	}
 
 	if claim.Status != models.ClaimStatusPending {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"code":    400,
-			"message": "该申请已处理",
-			"data":    nil,
-		})
+		utils.RespondWithError(c, http.StatusBadRequest, "该申请已处理")
 		return
 	}
 
 	admin, exists := c.Get("user")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"code":    401,
-			"message": "未登录",
-			"data":    nil,
-		})
+		utils.RespondWithError(c, http.StatusUnauthorized, "未登录")
 		return
 	}
 	currentAdmin := admin.(models.User)
@@ -1729,11 +1549,7 @@ func HandleClaim(c *gin.Context) {
 		Remark string `json:"remark"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"code":    400,
-			"message": "请提供操作类型",
-			"data":    nil,
-		})
+		utils.RespondWithError(c, http.StatusBadRequest, "请提供操作类型")
 		return
 	}
 
@@ -1751,20 +1567,12 @@ func HandleClaim(c *gin.Context) {
 		claim.ApprovedBy = &currentAdmin.ID
 		claim.Remark = req.Remark
 	} else {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"code":    400,
-			"message": "无效的操作类型",
-			"data":    nil,
-		})
+		utils.RespondWithError(c, http.StatusBadRequest, "无效的操作类型")
 		return
 	}
 
 	if err := utils.DB.Save(&claim).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"code":    500,
-			"message": "处理失败",
-			"data":    nil,
-		})
+		utils.RespondWithError(c, http.StatusInternalServerError, "处理失败")
 		return
 	}
 

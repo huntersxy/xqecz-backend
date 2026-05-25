@@ -1,4 +1,3 @@
-
 package middleware
 
 import (
@@ -13,22 +12,14 @@ func AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		sessionID, err := c.Cookie("session_id")
 		if err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"code":    401,
-				"message": "未登录",
-				"data":    nil,
-			})
+			utils.RespondWithError(c, http.StatusUnauthorized, "未登录")
 			c.Abort()
 			return
 		}
 
 		userID, err := utils.GetSession(sessionID)
 		if err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"code":    401,
-				"message": "会话已过期",
-				"data":    nil,
-			})
+			utils.RespondWithError(c, http.StatusUnauthorized, "会话已过期")
 			c.Abort()
 			return
 		}
@@ -38,11 +29,7 @@ func AuthMiddleware() gin.HandlerFunc {
 			user = *cached
 		} else {
 			if err := utils.DB.First(&user, userID).Error; err != nil {
-				c.JSON(http.StatusUnauthorized, gin.H{
-					"code":    401,
-					"message": "用户不存在",
-					"data":    nil,
-				})
+				utils.RespondWithError(c, http.StatusUnauthorized, "用户不存在")
 				c.Abort()
 				return
 			}
@@ -58,32 +45,20 @@ func AdminMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		user, exists := c.Get("user")
 		if !exists {
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"code":    401,
-				"message": "未登录",
-				"data":    nil,
-			})
+			utils.RespondWithError(c, http.StatusUnauthorized, "未登录")
 			c.Abort()
 			return
 		}
 
 		u, ok := user.(models.User)
 		if !ok {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"code":    500,
-				"message": "用户信息错误",
-				"data":    nil,
-			})
+			utils.RespondWithError(c, http.StatusInternalServerError, "用户信息错误")
 			c.Abort()
 			return
 		}
 
 		if !u.IsAdmin {
-			c.JSON(http.StatusForbidden, gin.H{
-				"code":    403,
-				"message": "需要管理员权限",
-				"data":    nil,
-			})
+			utils.RespondWithError(c, http.StatusForbidden, "需要管理员权限")
 			c.Abort()
 			return
 		}
@@ -96,32 +71,20 @@ func BannedMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		user, exists := c.Get("user")
 		if !exists {
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"code":    401,
-				"message": "未登录",
-				"data":    nil,
-			})
+			utils.RespondWithError(c, http.StatusUnauthorized, "未登录")
 			c.Abort()
 			return
 		}
 
 		u, ok := user.(models.User)
 		if !ok {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"code":    500,
-				"message": "用户信息错误",
-				"data":    nil,
-			})
+			utils.RespondWithError(c, http.StatusInternalServerError, "用户信息错误")
 			c.Abort()
 			return
 		}
 
 		if u.IsBanned {
-			c.JSON(http.StatusForbidden, gin.H{
-				"code":    403,
-				"message": "账号已被封禁",
-				"data":    nil,
-			})
+			utils.RespondWithError(c, http.StatusForbidden, "账号已被封禁")
 			c.Abort()
 			return
 		}

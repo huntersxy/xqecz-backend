@@ -19,11 +19,11 @@ var RedisClient *redis.Client
 var ctx = context.Background()
 
 const (
-	redisKeySession        = "session:"
-	redisKeyViewsDate      = "views:date:%s:%d"
-	redisKeyRecommendZSet  = "recommend:zset"
-	redisKeyRecommendTemp  = "recommend:zset:temp"
-	redisKeyUserInfo       = "user_info:"
+	redisKeySession       = "session:"
+	redisKeyViewsDate     = "views:date:%s:%d"
+	redisKeyRecommendZSet = "recommend:zset"
+	redisKeyRecommendTemp = "recommend:zset:temp"
+	redisKeyUserInfo      = "user_info:"
 )
 
 func InitRedis() error {
@@ -149,7 +149,7 @@ func GetViewCountInPeriod(contentID uint, days int) (int64, error) {
 	for i := 0; i < days; i++ {
 		date := now.AddDate(0, 0, -i)
 		dateStr := date.Format("2006-01-02")
-			key := fmt.Sprintf(redisKeyViewsDate, dateStr, contentID)
+		key := fmt.Sprintf(redisKeyViewsDate, dateStr, contentID)
 		count, err := RedisClient.Get(ctx, getKey(key)).Int64()
 		if err == nil {
 			total += count
@@ -368,7 +368,7 @@ func SetUserInfoCache(user *models.User) {
 	if RedisClient == nil {
 		return
 	}
-	SetCacheJSON(redisKeyUserInfo+strconv.Itoa(int(user.ID)), user, 5*time.Minute)
+	SetCacheJSON(redisKeyUserInfo+strconv.Itoa(int(user.ID)), user, CacheDuration5Min)
 }
 
 func ClearUserInfoCache(userID uint) {

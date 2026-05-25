@@ -11,44 +11,44 @@ import (
 )
 
 const (
-	DefaultMySQLHost     = "localhost"
-	DefaultMySQLPort     = 3306
-	DefaultMySQLUser     = "root"
-	DefaultMySQLPassword = "root"
-	DefaultMySQLDatabase = "xiaoquan"
-	DefaultMySQLCharset  = "utf8mb4"
-	DefaultMaxOpenConns  = 30
-	DefaultMaxIdleConns  = 10
+	DefaultMySQLHost       = "localhost"
+	DefaultMySQLPort       = 3306
+	DefaultMySQLUser       = "root"
+	DefaultMySQLPassword   = "root"
+	DefaultMySQLDatabase   = "xiaoquan"
+	DefaultMySQLCharset    = "utf8mb4"
+	DefaultMaxOpenConns    = 30
+	DefaultMaxIdleConns    = 10
 	DefaultConnMaxLifetime = 3600
 	DefaultConnMaxIdleTime = 1800
 
-	DefaultServerPort     = 8080
+	DefaultServerPort    = 8080
 	DefaultUploadDir     = "./uploads"
 	DefaultThumbnailDir  = "./thumbnails"
 	DefaultMaxUploadSize = 1073741824
 
-	DefaultRedisHost    = "localhost"
-	DefaultRedisPort    = 6379
+	DefaultRedisHost     = "localhost"
+	DefaultRedisPort     = 6379
 	DefaultRedisPassword = ""
-	DefaultRedisDB      = 0
-	DefaultRedisTimeout = 5
-	DefaultRedisPrefix  = "xiaoquan:"
+	DefaultRedisDB       = 0
+	DefaultRedisTimeout  = 5
+	DefaultRedisPrefix   = "xiaoquan:"
 
 	DefaultSpamAPIURL = ""
 	DefaultBotToken   = ""
 )
 
 type Config struct {
-	MySQL             MySQLConfig      `yaml:"mysql"`
-	Server            ServerConfig     `yaml:"server"`
-	SpamAPI           SpamAPIConfig    `yaml:"spam_api"`
-	Redis             RedisConfig      `yaml:"redis"`
-	Bot               BotConfig        `yaml:"bot"`
-	Recommend         RecommendConfig  `yaml:"recommend"`
-	MigrateThumbnails bool             `yaml:"migrate_thumbnails"`
-	InitAdmin         bool             `yaml:"init_admin"`
-	TinifyAPIKey  string `yaml:"tinify_api_key"`
-	TinifyEnabled bool   `yaml:"tinify_enabled"`
+	MySQL             MySQLConfig     `yaml:"mysql"`
+	Server            ServerConfig    `yaml:"server"`
+	SpamAPI           SpamAPIConfig   `yaml:"spam_api"`
+	Redis             RedisConfig     `yaml:"redis"`
+	Bot               BotConfig       `yaml:"bot"`
+	Recommend         RecommendConfig `yaml:"recommend"`
+	MigrateThumbnails bool            `yaml:"migrate_thumbnails"`
+	InitAdmin         bool            `yaml:"init_admin"`
+	TinifyAPIKey      string          `yaml:"tinify_api_key"`
+	TinifyEnabled     bool            `yaml:"tinify_enabled"`
 }
 
 type RecommendConfig struct {
@@ -252,8 +252,8 @@ func GetDefaultConfig() *Config {
 		},
 		MigrateThumbnails: true,
 		InitAdmin:         false,
-		TinifyAPIKey:  "",
-		TinifyEnabled: false,
+		TinifyAPIKey:      "",
+		TinifyEnabled:     false,
 	}
 }
 

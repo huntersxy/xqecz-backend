@@ -1,4 +1,3 @@
-
 package handlers
 
 import (
@@ -145,11 +144,7 @@ func enrichLinkContent(content *models.Content, linkUrl string, title string) {
 func handleFileUpload(title string, tags []string, c *gin.Context) (*models.Content, error) {
 	file, err := c.FormFile("file")
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"code":    400,
-			"message": "请上传文件或提供链接",
-			"data":    nil,
-		})
+		utils.RespondWithError(c, http.StatusBadRequest, "请上传文件或提供链接")
 		return nil, errBotAbort
 	}
 
@@ -173,11 +168,7 @@ func handleFileUpload(title string, tags []string, c *gin.Context) (*models.Cont
 	}
 
 	if file.Size > maxSize {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"code":    400,
-			"message": "文件大小超出限制",
-			"data":    nil,
-		})
+		utils.RespondWithError(c, http.StatusBadRequest, "文件大小超出限制")
 		return nil, errBotAbort
 	}
 
@@ -189,11 +180,7 @@ func handleFileUpload(title string, tags []string, c *gin.Context) (*models.Cont
 
 	result, err := uploadService.Upload(file)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"code":    400,
-			"message": err.Error(),
-			"data":    nil,
-		})
+		utils.RespondWithError(c, http.StatusBadRequest, err.Error())
 		return nil, errBotAbort
 	}
 

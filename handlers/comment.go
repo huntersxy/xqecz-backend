@@ -42,19 +42,19 @@ type CommentItem struct {
 	UserID    uint           `json:"user_id"`
 	User      CommentUser    `json:"user"`
 	Text      string         `json:"text"`
-	ParentID  *uint         `json:"parent_id,omitempty"`
+	ParentID  *uint          `json:"parent_id,omitempty"`
 	Parent    *CommentReply  `json:"parent,omitempty"`
 	Replies   []CommentReply `json:"replies,omitempty"`
 	IsBanned  bool           `json:"is_banned"`
-	CreatedAt int64         `json:"created_at"`
+	CreatedAt int64          `json:"created_at"`
 }
 
 type CommentListResponse struct {
 	List      []CommentItem `json:"list"`
-	Total     int64        `json:"total"`
-	Page      int          `json:"page"`
-	PageSize  int          `json:"page_size"`
-	TotalPage int64        `json:"total_page"`
+	Total     int64         `json:"total"`
+	Page      int           `json:"page"`
+	PageSize  int           `json:"page_size"`
+	TotalPage int64         `json:"total_page"`
 }
 
 // AddComment 添加评论
@@ -335,14 +335,7 @@ func parseCommentPagination(c *gin.Context) (page, pageSize int, contentID uint,
 	}
 	contentID = uint(parsed)
 
-	page, _ = strconv.Atoi(c.DefaultQuery("page", "1"))
-	pageSize, _ = strconv.Atoi(c.DefaultQuery("page_size", "20"))
-	if page < 1 {
-		page = 1
-	}
-	if pageSize < 1 {
-		pageSize = 20
-	}
+	page, pageSize, _ = utils.ParsePagination(c, utils.DefaultPageSize, utils.MaxPageSize)
 	return page, pageSize, contentID, nil
 }
 
@@ -655,11 +648,7 @@ func GetCommentReports(c *gin.Context) {
 		Preload("User").
 		Order("created_at DESC").
 		Find(&reports).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"code":    500,
-			"message": "获取举报列表失败",
-			"data":    nil,
-		})
+		utils.RespondWithError(c, http.StatusInternalServerError, "获取举报列表失败")
 		return
 	}
 
