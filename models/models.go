@@ -35,26 +35,26 @@ type User struct {
 }
 
 type Content struct {
-	ID          uint           `gorm:"primaryKey" json:"id"`
-	Title       string         `gorm:"size:200;not null" json:"title"`
-	Type        ContentType    `gorm:"size:20;not null;index" json:"type"`
-	Content     string         `gorm:"type:text" json:"content,omitempty"`
-	FilePath    string         `gorm:"size:500" json:"file_path,omitempty"`
-	FileSize    int64          `json:"file_size,omitempty"`
-	ThumbPath       string         `gorm:"size:500" json:"thumb_path,omitempty"`
-	CompressedPath  string         `gorm:"size:500;default:''" json:"compressed_path,omitempty"`
-	Url         string         `gorm:"size:500" json:"url,omitempty"`
-	Platform    string         `gorm:"size:20" json:"platform,omitempty"`
-	ViewCount   int64          `gorm:"default:0" json:"view_count"`
-	UserID      uint           `gorm:"not null;index" json:"user_id"`
-	User        User           `json:"user,omitempty"`
-	BigTagID    *uint          `gorm:"index" json:"big_tag_id,omitempty"`
-	SmallTagID  *uint          `gorm:"index" json:"small_tag_id,omitempty"`
-	Tags        []string       `gorm:"type:text;serializer:json" json:"tags,omitempty"`
-	AuditStatus AuditStatus    `gorm:"size:20;default:pending;index" json:"audit_status"`
-	CreatedAt   time.Time      `json:"created_at"`
-	UpdatedAt   time.Time      `json:"updated_at"`
-	DeletedAt   gorm.DeletedAt `gorm:"index" json:"-"`
+	ID             uint           `gorm:"primaryKey" json:"id"`
+	Title          string         `gorm:"size:200;not null" json:"title"`
+	Type           ContentType    `gorm:"size:20;not null;index" json:"type"`
+	Content        string         `gorm:"type:text" json:"content,omitempty"`
+	FilePath       string         `gorm:"size:500" json:"file_path,omitempty"`
+	FileSize       int64          `json:"file_size,omitempty"`
+	ThumbPath      string         `gorm:"size:500" json:"thumb_path,omitempty"`
+	CompressedPath string         `gorm:"size:500;default:''" json:"compressed_path,omitempty"`
+	Url            string         `gorm:"size:500" json:"url,omitempty"`
+	Platform       string         `gorm:"size:20" json:"platform,omitempty"`
+	ViewCount      int64          `gorm:"default:0" json:"view_count"`
+	UserID         uint           `gorm:"not null;index" json:"user_id"`
+	User           User           `json:"user,omitempty"`
+	BigTagID       *uint          `gorm:"index" json:"big_tag_id,omitempty"`
+	SmallTagID     *uint          `gorm:"index" json:"small_tag_id,omitempty"`
+	Tags           []string       `gorm:"type:text;serializer:json" json:"tags,omitempty"`
+	AuditStatus    AuditStatus    `gorm:"size:20;default:pending;index" json:"audit_status"`
+	CreatedAt      time.Time      `json:"created_at"`
+	UpdatedAt      time.Time      `json:"updated_at"`
+	DeletedAt      gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
 type Comment struct {
@@ -110,34 +110,34 @@ type Poll struct {
 }
 
 type PollVote struct {
-	ID           uint           `gorm:"primaryKey" json:"id"`
-	PollID       uint           `gorm:"not null;index" json:"poll_id"`
-	Poll         Poll           `json:"poll,omitempty"`
-	UserID       *uint          `gorm:"index" json:"user_id,omitempty"`
-	User         User           `json:"user,omitempty"`
-	VisitorID    string         `gorm:"size:64;index" json:"visitor_id,omitempty"`
-	OptionIndex  int            `gorm:"not null" json:"option_index"`
-	CreatedAt    time.Time      `json:"created_at"`
+	ID          uint      `gorm:"primaryKey" json:"id"`
+	PollID      uint      `gorm:"not null;index" json:"poll_id"`
+	Poll        Poll      `json:"poll,omitempty"`
+	UserID      *uint     `gorm:"index" json:"user_id,omitempty"`
+	User        User      `json:"user,omitempty"`
+	VisitorID   string    `gorm:"size:64;index" json:"visitor_id,omitempty"`
+	OptionIndex int       `gorm:"not null" json:"option_index"`
+	CreatedAt   time.Time `json:"created_at"`
 }
 
 type ClaimStatus string
 
 const (
-	ClaimStatusPending   ClaimStatus = "pending"
-	ClaimStatusApproved  ClaimStatus = "approved"
-	ClaimStatusRejected  ClaimStatus = "rejected"
+	ClaimStatusPending  ClaimStatus = "pending"
+	ClaimStatusApproved ClaimStatus = "approved"
+	ClaimStatusRejected ClaimStatus = "rejected"
 )
 
 type Claim struct {
-	ID          uint           `gorm:"primaryKey" json:"id"`
-	ContentID   uint           `gorm:"not null;index" json:"content_id"`
-	Content     Content        `json:"content,omitempty"`
-	UserID      uint           `gorm:"not null;index" json:"user_id"`
-	User        User           `json:"user,omitempty"`
-	Reason      string         `gorm:"type:text" json:"reason,omitempty"`
-	Status      ClaimStatus    `gorm:"size:20;default:pending;index" json:"status"`
-	ApprovedBy  *uint          `gorm:"index" json:"approved_by,omitempty"`
-	Remark      string         `gorm:"type:text" json:"remark,omitempty"`
-	CreatedAt   time.Time      `json:"created_at"`
-	UpdatedAt   time.Time      `json:"updated_at"`
+	ID         uint        `gorm:"primaryKey" json:"id"`
+	ContentID  uint        `gorm:"not null;index" json:"content_id"`
+	Content    Content     `json:"content,omitempty"`
+	UserID     uint        `gorm:"not null;index" json:"user_id"`
+	User       User        `json:"user,omitempty"`
+	Reason     string      `gorm:"type:text" json:"reason,omitempty"`
+	Status     ClaimStatus `gorm:"size:20;default:pending;index" json:"status"`
+	ApprovedBy *uint       `gorm:"index" json:"approved_by,omitempty"`
+	Remark     string      `gorm:"type:text" json:"remark,omitempty"`
+	CreatedAt  time.Time   `json:"created_at"`
+	UpdatedAt  time.Time   `json:"updated_at"`
 }

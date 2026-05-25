@@ -1,10 +1,10 @@
-
 package middleware
 
 import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"xiaoquan-backend/utils"
 )
 
 func ErrorHandler() gin.HandlerFunc {
@@ -12,11 +12,7 @@ func ErrorHandler() gin.HandlerFunc {
 		c.Next()
 
 		if len(c.Errors) > 0 {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"code":    500,
-				"message": "遇到问题啦",
-				"data":    nil,
-			})
+			utils.RespondWithError(c, http.StatusInternalServerError, "遇到问题啦")
 			c.Abort()
 		}
 	}

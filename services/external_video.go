@@ -41,10 +41,10 @@ type VideoInfo struct {
 }
 
 var (
-	bilibiliBVPattern = regexp.MustCompile(`BV[0-9A-Za-z]{10}`)
+	bilibiliBVPattern  = regexp.MustCompile(`BV[0-9A-Za-z]{10}`)
 	douyinVideoPattern = regexp.MustCompile(`(?:www\.)?douyin\.com/video/(\d+)`)
-	douyinShortPattern  = regexp.MustCompile(`v\.douyin\.com/([A-Za-z0-9]+)`)
-	youtubeIDPattern    = regexp.MustCompile(`(?:youtube\.com/watch\?v=|youtu\.be/|youtube\.com/embed/|youtube\.com/v/|youtube\.com/shorts/)([A-Za-z0-9_-]{11})`)
+	douyinShortPattern = regexp.MustCompile(`v\.douyin\.com/([A-Za-z0-9]+)`)
+	youtubeIDPattern   = regexp.MustCompile(`(?:youtube\.com/watch\?v=|youtu\.be/|youtube\.com/embed/|youtube\.com/v/|youtube\.com/shorts/)([A-Za-z0-9_-]{11})`)
 )
 
 var httpClient = &http.Client{
@@ -217,10 +217,7 @@ func fetchDouyinInfo(videoID string) (*VideoInfo, error) {
 	if m := ogTitlePattern.FindStringSubmatch(html); len(m) >= 2 {
 		title = m[1]
 	} else if m := titlePattern.FindStringSubmatch(html); len(m) >= 2 {
-		title = strings.TrimSpace(m[1])
-		title = strings.Replace(title, "抖音-", "", 1)
-		title = strings.Replace(title, " - 抖音", "", 1)
-		title = strings.TrimSpace(title)
+		title = strings.NewReplacer("抖音-", "", " - 抖音", "").Replace(strings.TrimSpace(m[1]))
 	}
 
 	coverURL := ""
@@ -228,7 +225,6 @@ func fetchDouyinInfo(videoID string) (*VideoInfo, error) {
 		coverURL = m[1]
 	} else if m := coverPattern.FindStringSubmatch(html); len(m) >= 2 {
 		coverURL = m[2]
-		err = nil
 	}
 
 	if coverURL == "" {
@@ -264,9 +260,9 @@ func fetchYouTubeInfo(videoID string) (*VideoInfo, error) {
 	}
 
 	var result struct {
-		Title         string `json:"title"`
-		ThumbnailURL  string `json:"thumbnail_url"`
-		ThumbnailWidth  int  `json:"thumbnail_width"`
+		Title          string `json:"title"`
+		ThumbnailURL   string `json:"thumbnail_url"`
+		ThumbnailWidth int    `json:"thumbnail_width"`
 	}
 
 	if err := json.Unmarshal(body, &result); err != nil {

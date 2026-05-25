@@ -22,12 +22,10 @@ import (
 // @Failure      401 {object} utils.SwaggerResponse
 // @Router       /poll/create [post]
 func CreatePoll(c *gin.Context) {
-	user, exists := c.Get("user")
-	if !exists {
-		utils.RespondWithError(c, http.StatusUnauthorized, "未登录")
+	currentUser, ok := requireUser(c)
+	if !ok {
 		return
 	}
-	currentUser := user.(models.User)
 
 	var req struct {
 		Title       string   `json:"title" binding:"required"`
@@ -229,12 +227,10 @@ func VotePoll(c *gin.Context) {
 // @Failure      404 {object} utils.SwaggerResponse
 // @Router       /poll/{id} [delete]
 func DeletePoll(c *gin.Context) {
-	user, exists := c.Get("user")
-	if !exists {
-		utils.RespondWithError(c, http.StatusUnauthorized, "未登录")
+	currentUser, ok := requireUser(c)
+	if !ok {
 		return
 	}
-	currentUser := user.(models.User)
 
 	id := c.Param("id")
 	var poll models.Poll

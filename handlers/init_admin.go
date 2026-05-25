@@ -1,26 +1,22 @@
-
 package handlers
 
 import (
 	"crypto/rand"
+	"github.com/gin-gonic/gin"
+	"golang.org/x/crypto/bcrypt"
 	"log"
 	"math/big"
 	"net/http"
 	"xiaoquan-backend/config"
 	"xiaoquan-backend/models"
 	"xiaoquan-backend/utils"
-	"github.com/gin-gonic/gin"
-	"golang.org/x/crypto/bcrypt"
 )
 
 func generateRandomPassword(length int) string {
 	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 	b := make([]byte, length)
 	for i := range b {
-		n, err := rand.Int(rand.Reader, big.NewInt(int64(len(charset))))
-		if err != nil {
-			_ = err
-		}
+		n, _ := rand.Int(rand.Reader, big.NewInt(int64(len(charset))))
 		b[i] = charset[n.Int64()]
 	}
 	return string(b)
@@ -60,11 +56,7 @@ func InitAdmin(c *gin.Context) {
 
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"code":    500,
-			"message": "密码加密失败",
-			"data":    nil,
-		})
+		utils.RespondWithError(c, http.StatusInternalServerError, "密码加密失败")
 		return
 	}
 
@@ -75,11 +67,7 @@ func InitAdmin(c *gin.Context) {
 	}
 
 	if err := utils.DB.Create(admin).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"code":    500,
-			"message": "创建管理员失败",
-			"data":    nil,
-		})
+		utils.RespondWithError(c, http.StatusInternalServerError, "创建管理员失败")
 		return
 	}
 

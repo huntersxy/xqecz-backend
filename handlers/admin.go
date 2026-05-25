@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strconv"
 	"xiaoquan-backend/config"
 	"xiaoquan-backend/models"
 	"xiaoquan-backend/services"
@@ -16,9 +15,9 @@ import (
 )
 
 type AuditRequest struct {
-	AdminID uint              `json:"admin_id" binding:"required"`
+	AdminID uint               `json:"admin_id" binding:"required"`
 	Status  models.AuditStatus `json:"status" binding:"required"`
-	Remark  string              `json:"remark"`
+	Remark  string             `json:"remark"`
 }
 
 // AuditContent 审核内容
@@ -88,18 +87,7 @@ func GetPendingContent(c *gin.Context) {
 
 	query := utils.DB.Model(&models.Content{}).Where("audit_status = ?", models.AuditStatusPending)
 
-	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
-	if page < 1 {
-		page = 1
-	}
-	if pageSize < 1 {
-		pageSize = 20
-	}
-	if pageSize > 100 {
-		pageSize = 100
-	}
-	offset := (page - 1) * pageSize
+	page, pageSize, offset := utils.ParsePagination(c, utils.DefaultPageSize, utils.MaxPageSize)
 
 	query.Count(&total)
 
@@ -162,30 +150,8 @@ func GetAllContent(c *gin.Context) {
 		query = query.Where("title LIKE ? OR content LIKE ?", "%"+keyword+"%", "%"+keyword+"%")
 	}
 
-	sortBy := c.DefaultQuery("sort_by", "created_at")
-	order := c.DefaultQuery("order", "desc")
-	validSortFields := map[string]bool{"created_at": true, "updated_at": true, "id": true}
-	validOrders := map[string]bool{"asc": true, "desc": true}
-	if !validSortFields[sortBy] {
-		sortBy = "created_at"
-	}
-	if !validOrders[order] {
-		order = "desc"
-	}
-	orderStr := sortBy + " " + order
-
-	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
-	if page < 1 {
-		page = 1
-	}
-	if pageSize < 1 {
-		pageSize = 20
-	}
-	if pageSize > 100 {
-		pageSize = 100
-	}
-	offset := (page - 1) * pageSize
+	orderStr := utils.BuildSortClause(c)
+	page, pageSize, offset := utils.ParsePagination(c, utils.DefaultPageSize, utils.MaxPageSize)
 
 	query.Count(&total)
 
@@ -193,11 +159,7 @@ func GetAllContent(c *gin.Context) {
 		Order(orderStr).Limit(pageSize).Offset(offset)
 
 	if err := query.Find(&contents).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"code":    500,
-			"message": "failed to get contents",
-			"data":    nil,
-		})
+		utils.RespondWithError(c, http.StatusInternalServerError, "获取内容列表失败")
 		return
 	}
 
@@ -240,18 +202,7 @@ func GetUsers(c *gin.Context) {
 		query = query.Where("username LIKE ?", "%"+keyword+"%")
 	}
 
-	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
-	if page < 1 {
-		page = 1
-	}
-	if pageSize < 1 {
-		pageSize = 20
-	}
-	if pageSize > 100 {
-		pageSize = 100
-	}
-	offset := (page - 1) * pageSize
+	page, pageSize, offset := utils.ParsePagination(c, utils.DefaultPageSize, utils.MaxPageSize)
 
 	query.Count(&total)
 

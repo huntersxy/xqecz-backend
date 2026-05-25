@@ -1,4 +1,3 @@
-
 package handlers
 
 import (
@@ -115,41 +114,14 @@ func handleLinkUpload(title string, tags []string, c *gin.Context) (*models.Cont
 		AuditStatus: models.AuditStatusApproved,
 		Tags:        tags,
 	}
-	enrichLinkContent(content, linkUrl, title)
+	processUploadLink(content, linkUrl, 1)
 	return content, nil
-}
-
-func enrichLinkContent(content *models.Content, linkUrl string, title string) {
-	platform, sourceID, err := services.DetectPlatform(linkUrl)
-	if err != nil {
-		return
-	}
-	videoInfo, err := services.FetchVideoInfo(platform, sourceID)
-	if err != nil {
-		return
-	}
-	content.Platform = string(videoInfo.Platform)
-	if title == "" || title == "Bot Upload" {
-		content.Title = videoInfo.Title
-	}
-	if videoInfo.CoverURL != "" || videoInfo.Platform == services.PlatformDouyin {
-		coverFilename, err := services.DownloadCover(videoInfo.CoverURL, 1, videoInfo.Platform == services.PlatformDouyin)
-		if err != nil {
-			log.Printf("Warning: failed to download cover for bot link: %v", err)
-		} else {
-			content.ThumbPath = coverFilename
-		}
-	}
 }
 
 func handleFileUpload(title string, tags []string, c *gin.Context) (*models.Content, error) {
 	file, err := c.FormFile("file")
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"code":    400,
-			"message": "请上传文件或提供链接",
-			"data":    nil,
-		})
+		utils.RespondWithError(c, http.StatusBadRequest, "请上传文件或提供链接")
 		return nil, errBotAbort
 	}
 
@@ -173,11 +145,7 @@ func handleFileUpload(title string, tags []string, c *gin.Context) (*models.Cont
 	}
 
 	if file.Size > maxSize {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"code":    400,
-			"message": "文件大小超出限制",
-			"data":    nil,
-		})
+		utils.RespondWithError(c, http.StatusBadRequest, "文件大小超出限制")
 		return nil, errBotAbort
 	}
 
@@ -189,11 +157,7 @@ func handleFileUpload(title string, tags []string, c *gin.Context) (*models.Cont
 
 	result, err := uploadService.Upload(file)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"code":    400,
-			"message": err.Error(),
-			"data":    nil,
-		})
+		utils.RespondWithError(c, http.StatusBadRequest, err.Error())
 		return nil, errBotAbort
 	}
 

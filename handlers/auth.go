@@ -1,16 +1,15 @@
-
 package handlers
 
 import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"github.com/gin-gonic/gin"
+	"golang.org/x/crypto/bcrypt"
 	"net/http"
 	"time"
 	"xiaoquan-backend/models"
 	"xiaoquan-backend/utils"
-	"github.com/gin-gonic/gin"
-	"golang.org/x/crypto/bcrypt"
 )
 
 const (
@@ -50,20 +49,12 @@ func Register(c *gin.Context) {
 	}
 
 	if !utils.ValidateUsername(req.Username) {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"code":    400,
-			"message": "用户名无效（3-50个字符）",
-			"data":    nil,
-		})
+		utils.RespondWithError(c, http.StatusBadRequest, "用户名无效（3-50个字符）")
 		return
 	}
 
 	if !utils.ValidatePassword(req.Password) {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"code":    400,
-			"message": "密码至少6位",
-			"data":    nil,
-		})
+		utils.RespondWithError(c, http.StatusBadRequest, "密码至少6位")
 		return
 	}
 
@@ -75,11 +66,7 @@ func Register(c *gin.Context) {
 
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"code":    500,
-			"message": "密码加密失败",
-			"data":    nil,
-		})
+		utils.RespondWithError(c, http.StatusInternalServerError, "密码加密失败")
 		return
 	}
 
@@ -121,20 +108,12 @@ func Login(c *gin.Context) {
 
 	var user models.User
 	if err := utils.DB.Where("username = ?", req.Username).First(&user).Error; err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"code":    401,
-			"message": "用户名或密码错误",
-			"data":    nil,
-		})
+		utils.RespondWithError(c, http.StatusUnauthorized, "用户名或密码错误")
 		return
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"code":    401,
-			"message": "用户名或密码错误",
-			"data":    nil,
-		})
+		utils.RespondWithError(c, http.StatusUnauthorized, "用户名或密码错误")
 		return
 	}
 
@@ -189,14 +168,8 @@ func Logout(c *gin.Context) {
 // GetMe 获取当前登录用户信息
 // 从请求上下文获取已通过AuthMiddleware验证的用户信息
 func GetMe(c *gin.Context) {
-	user, exists := c.Get("user")
-	if !exists {
-		utils.RespondWithError(c, http.StatusUnauthorized, "未登录")
-		return
-	}
-	u, ok := user.(models.User)
+	u, ok := requireUser(c)
 	if !ok {
-		utils.RespondWithError(c, http.StatusInternalServerError, "用户信息错误")
 		return
 	}
 	utils.RespondWithSuccess(c, gin.H{

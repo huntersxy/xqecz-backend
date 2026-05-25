@@ -13,9 +13,9 @@ import (
 
 type FileUploadConfig struct {
 	AllowedExtensions []string
-	MaxSize          int64
-	UploadDir        string
-	UserID          uint
+	MaxSize           int64
+	UploadDir         string
+	UserID            uint
 }
 
 type FileUploadResult struct {
@@ -128,13 +128,13 @@ func (s *FileUploadService) validateMIME(file *multipart.FileHeader) error {
 
 	mimeType := http.DetectContentType(buf)
 	allowed := map[string]bool{
-		"image/jpeg": true,
-		"image/png":  true,
-		"image/gif":  true,
-		"image/webp": true,
-		"video/mp4":  true,
-		"video/x-msvideo": true,
-		"video/quicktime": true,
+		"image/jpeg":       true,
+		"image/png":        true,
+		"image/gif":        true,
+		"image/webp":       true,
+		"video/mp4":        true,
+		"video/x-msvideo":  true,
+		"video/quicktime":  true,
 		"video/x-matroska": true,
 	}
 	if !allowed[mimeType] {
