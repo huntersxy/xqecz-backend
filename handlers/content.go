@@ -207,6 +207,9 @@ func processUploadLink(content *models.Content, linkUrl string, userID uint) {
 		content.Title = utils.SanitizeHTML(videoInfo.Title)
 	}
 	if videoInfo.CoverURL != "" || videoInfo.Platform == services.PlatformDouyin {
+		if content.ThumbPath != "" {
+			os.Remove(filepath.Join(config.AppConfig.Server.ThumbnailDir, content.ThumbPath))
+		}
 		coverFilename, err := services.DownloadCover(videoInfo.CoverURL, userID, videoInfo.Platform == services.PlatformDouyin)
 		if err != nil {
 			log.Printf("Warning: failed to download cover for link: %v", err)
@@ -606,39 +609,11 @@ func processUpdateContentForm(c *gin.Context, content *models.Content) {
 
 	if content.Type == models.ContentTypeLink && newUrl != "" && newUrl != content.Url {
 		content.Url = newUrl
-		updateContentLinkInfo(content, newUrl, title)
+		processUploadLink(content, newUrl, content.UserID)
 	}
 
 	if len(tags) > 0 {
 		content.Tags = deduplicateTags(tags)
-	}
-}
-
-func updateContentLinkInfo(content *models.Content, newUrl string, title string) {
-	platform, sourceID, err := services.DetectPlatform(newUrl)
-	if err != nil {
-		return
-	}
-	videoInfo, err := services.FetchVideoInfo(platform, sourceID)
-	if err != nil {
-		log.Printf("Warning: failed to fetch video info: %v", err)
-		return
-	}
-	content.Platform = string(videoInfo.Platform)
-	if title == "" {
-		content.Title = utils.SanitizeHTML(videoInfo.Title)
-	}
-	if videoInfo.CoverURL != "" || videoInfo.Platform == services.PlatformDouyin {
-		if content.ThumbPath != "" {
-			oldThumbPath := filepath.Join(config.AppConfig.Server.ThumbnailDir, content.ThumbPath)
-			os.Remove(oldThumbPath)
-		}
-		coverFilename, err := services.DownloadCover(videoInfo.CoverURL, content.UserID, videoInfo.Platform == services.PlatformDouyin)
-		if err != nil {
-			log.Printf("Warning: failed to download cover: %v", err)
-		} else {
-			content.ThumbPath = coverFilename
-		}
 	}
 }
 
