@@ -2,10 +2,10 @@
 package handlers
 
 import (
+	"crypto/rand"
 	"log"
-	"math/rand"
+	"math/big"
 	"net/http"
-	"time"
 	"xiaoquan-backend/config"
 	"xiaoquan-backend/models"
 	"xiaoquan-backend/utils"
@@ -13,15 +13,15 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-func init() {
-	rand.Seed(time.Now().UnixNano())
-}
-
 func generateRandomPassword(length int) string {
 	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 	b := make([]byte, length)
 	for i := range b {
-		b[i] = charset[rand.Intn(len(charset))]
+		n, err := rand.Int(rand.Reader, big.NewInt(int64(len(charset))))
+		if err != nil {
+			_ = err
+		}
+		b[i] = charset[n.Int64()]
 	}
 	return string(b)
 }

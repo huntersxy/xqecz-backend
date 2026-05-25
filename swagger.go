@@ -23,7 +23,12 @@ func registerSwaggerRoutes(r *gin.Engine) {
 
 func autoSwagInit() {
 	log.Println("[启动] 正在重新生成 Swagger 文档...")
-	cmd := exec.Command("swag", "init")
+	swagPath, err := exec.LookPath("swag")
+	if err != nil {
+		log.Printf("[警告] Swagger 文档生成失败: swag未安装 (请确保已安装: go install github.com/swaggo/swag/cmd/swag@latest)")
+		return
+	}
+	cmd := exec.Command(swagPath, "init")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {

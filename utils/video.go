@@ -11,16 +11,19 @@ import (
 )
 
 func CheckFFmpeg() error {
-	cmd := exec.Command("ffmpeg", "-version")
-	if err := cmd.Run(); err != nil {
+	ffmpeg, err := exec.LookPath("ffmpeg")
+	if err != nil {
 		return fmt.Errorf("ffmpeg未安装或未配置到PATH环境变量")
 	}
-	return nil
+	return exec.Command(ffmpeg, "-version").Run()
 }
 
 func GetFFmpegVersion() (string, error) {
-	cmd := exec.Command("ffmpeg", "-version")
-	output, err := cmd.Output()
+	ffmpeg, err := exec.LookPath("ffmpeg")
+	if err != nil {
+		return "", fmt.Errorf("获取ffmpeg版本失败: %v", err)
+	}
+	output, err := exec.Command(ffmpeg, "-version").Output()
 	if err != nil {
 		return "", fmt.Errorf("获取ffmpeg版本失败: %v", err)
 	}
@@ -36,7 +39,11 @@ func GenerateVideoThumbnail(videoPath, filename string) (string, error) {
 	thumbFilename := filename[:len(filename)-len(filepath.Ext(filename))] + "_thumb" + thumbExt
 	thumbPath := filepath.Join(config.AppConfig.Server.ThumbnailDir, thumbFilename)
 
-	cmd := exec.Command("ffmpeg", "-i", videoPath, "-vf", "select=eq(n\\,9)", "-vframes", "1", "-c:v", "libwebp", "-quality", "60", "-y", thumbPath)
+	ffmpeg, _ := exec.LookPath("ffmpeg")
+	if ffmpeg == "" {
+		ffmpeg = "ffmpeg"
+	}
+	cmd := exec.Command(ffmpeg, "-i", videoPath, "-vf", "select=eq(n\\,9)", "-vframes", "1", "-c:v", "libwebp", "-quality", "60", "-y", thumbPath)
 	if err := cmd.Run(); err != nil {
 		return "", fmt.Errorf("failed to generate thumbnail: %v", err)
 	}
@@ -63,7 +70,11 @@ func GenerateImageThumbnail(originalPath, filename string) (string, error) {
 		return thumbFilename, nil
 	}
 
-	cmd := exec.Command("ffmpeg", "-i", originalPath, "-vf", "scale=800:-1", "-q:v", "8", "-y", thumbPath)
+	ffmpeg, _ := exec.LookPath("ffmpeg")
+	if ffmpeg == "" {
+		ffmpeg = "ffmpeg"
+	}
+	cmd := exec.Command(ffmpeg, "-i", originalPath, "-vf", "scale=800:-1", "-q:v", "8", "-y", thumbPath)
 	if err := cmd.Run(); err != nil {
 		return "", fmt.Errorf("failed to generate image thumbnail: %v", err)
 	}

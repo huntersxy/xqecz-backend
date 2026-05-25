@@ -352,7 +352,11 @@ func DownloadCover(coverURL string, userID uint, fallback bool) (string, error) 
 }
 
 func convertToWebP(srcPath, destPath string) error {
-	cmd := exec.Command("ffmpeg", "-i", srcPath, "-c:v", "libwebp", "-quality", "60", "-y", destPath)
+	ffmpeg, _ := exec.LookPath("ffmpeg")
+	if ffmpeg == "" {
+		ffmpeg = "ffmpeg"
+	}
+	cmd := exec.Command(ffmpeg, "-i", srcPath, "-c:v", "libwebp", "-quality", "60", "-y", destPath)
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("ffmpeg转webp失败: %w", err)
 	}

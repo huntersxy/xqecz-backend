@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"fmt"
 	"net/http"
 	"xiaoquan-backend/models"
 	"xiaoquan-backend/utils"
@@ -204,8 +203,7 @@ func VotePoll(c *gin.Context) {
 			OptionIndex: req.OptionIndex,
 		}
 
-		c.SetCookie("visitor_id", visitorID, 30*24*60*60, "/", "", true, false)
-		c.Writer.Header().Add("Set-Cookie", fmt.Sprintf("visitor_id=%s; Path=/; Max-Age=%d; SameSite=None; Secure", visitorID, 30*24*60*60))
+		c.SetCookie("visitor_id", visitorID, 30*24*60*60, "/", "", true, true)
 	}
 
 	if err := utils.DB.Create(&vote).Error; err != nil {
