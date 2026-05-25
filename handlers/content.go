@@ -207,9 +207,7 @@ func processUploadLink(content *models.Content, linkUrl string, userID uint) {
 		content.Title = utils.SanitizeHTML(videoInfo.Title)
 	}
 	if videoInfo.CoverURL != "" || videoInfo.Platform == services.PlatformDouyin {
-		if content.ThumbPath != "" {
-			os.Remove(filepath.Join(config.AppConfig.Server.ThumbnailDir, content.ThumbPath))
-		}
+		removeOldThumbnail(content)
 		coverFilename, err := services.DownloadCover(videoInfo.CoverURL, userID, videoInfo.Platform == services.PlatformDouyin)
 		if err != nil {
 			log.Printf("Warning: failed to download cover for link: %v", err)
@@ -626,9 +624,7 @@ func cleanupOldContentFiles(content *models.Content) {
 		deleteService.DeleteFile(content.FilePath)
 	}
 
-	if content.ThumbPath != "" {
-		os.Remove(filepath.Join(config.AppConfig.Server.ThumbnailDir, content.ThumbPath))
-	}
+	removeOldThumbnail(content)
 
 	if content.CompressedPath != "" {
 		compressedPath := filepath.Join(config.AppConfig.Server.UploadDir, "..", "images", content.CompressedPath)
@@ -636,6 +632,12 @@ func cleanupOldContentFiles(content *models.Content) {
 		os.Remove(absPath)
 		content.CompressedPath = ""
 		content.ThumbPath = ""
+	}
+}
+
+func removeOldThumbnail(content *models.Content) {
+	if content.ThumbPath != "" {
+		os.Remove(filepath.Join(config.AppConfig.Server.ThumbnailDir, content.ThumbPath))
 	}
 }
 
