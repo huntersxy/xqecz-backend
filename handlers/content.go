@@ -224,23 +224,7 @@ func handleUploadFile(c *gin.Context, content *models.Content, req *UploadReques
 	if err != nil {
 		return &httpError{code: http.StatusBadRequest, message: "请上传文件"}
 	}
-
-	allowedExts, maxSize := getFileUploadConfig(req.Type)
-	uploadService := services.NewFileUploadService(&services.FileUploadConfig{
-		AllowedExtensions: allowedExts,
-		MaxSize:           maxSize,
-		UserID:            content.UserID,
-	})
-
-	result, err := uploadService.Upload(file)
-	if err != nil {
-		return &httpError{code: http.StatusBadRequest, message: err.Error()}
-	}
-
-	content.FilePath = result.Filename
-	content.FileSize = result.FileSize
-	generateContentThumb(content, result.FilePath, result.Filename)
-	return nil
+	return doUploadFile(content, file, req.Type)
 }
 
 type ContentListCache struct {
@@ -631,23 +615,7 @@ func deduplicateTags(tags []string) []string {
 
 func processUpdateContentFile(c *gin.Context, content *models.Content, file *multipart.FileHeader) *httpError {
 	cleanupOldContentFiles(content)
-
-	allowedExts, maxSize := getFileUploadConfig(content.Type)
-	uploadService := services.NewFileUploadService(&services.FileUploadConfig{
-		AllowedExtensions: allowedExts,
-		MaxSize:           maxSize,
-		UserID:            content.UserID,
-	})
-
-	result, err := uploadService.Upload(file)
-	if err != nil {
-		return &httpError{code: http.StatusBadRequest, message: err.Error()}
-	}
-
-	content.FilePath = result.Filename
-	content.FileSize = result.FileSize
-	generateContentThumb(content, result.FilePath, result.Filename)
-	return nil
+	return doUploadFile(content, file, content.Type)
 }
 
 func cleanupOldContentFiles(content *models.Content) {
@@ -676,6 +644,25 @@ func getFileUploadConfig(ct models.ContentType) ([]string, int64) {
 		return []string{".jpg", ".jpeg", ".png", ".gif", ".webp"}, 10 * 1024 * 1024
 	}
 	return []string{".mp4", ".avi", ".mov", ".mkv"}, 500 * 1024 * 1024
+}
+
+func doUploadFile(content *models.Content, file *multipart.FileHeader, ct models.ContentType) *httpError {
+	allowedExts, maxSize := getFileUploadConfig(ct)
+	uploadService := services.NewFileUploadService(&services.FileUploadConfig{
+		AllowedExtensions: allowedExts,
+		MaxSize:           maxSize,
+		UserID:            content.UserID,
+	})
+
+	result, err := uploadService.Upload(file)
+	if err != nil {
+		return &httpError{code: http.StatusBadRequest, message: err.Error()}
+	}
+
+	content.FilePath = result.Filename
+	content.FileSize = result.FileSize
+	generateContentThumb(content, result.FilePath, result.Filename)
+	return nil
 }
 
 func generateContentThumb(content *models.Content, filePath, filename string) {
