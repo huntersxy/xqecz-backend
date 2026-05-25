@@ -169,7 +169,7 @@ func Logout(c *gin.Context) {
 	if err == nil {
 		utils.DeleteSession(sessionID)
 	}
-	c.SetCookie("session_id", "", -1, "/", "", false, true) // Secure=false is safe here: this is a deletion cookie, and localhost runs on HTTP
+	c.SetCookie("session_id", "", -1, "/", "", true, true)
 	c.JSON(http.StatusOK, gin.H{
 		"code":    200,
 		"message": "登出成功",
