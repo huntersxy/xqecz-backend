@@ -203,7 +203,7 @@ func processUploadLink(content *models.Content, linkUrl string, userID uint) {
 		return
 	}
 	content.Platform = string(videoInfo.Platform)
-	if content.Title == "" {
+	if content.Title == "" || content.Title == "Bot Upload" {
 		content.Title = utils.SanitizeHTML(videoInfo.Title)
 	}
 	if videoInfo.CoverURL != "" || videoInfo.Platform == services.PlatformDouyin {
