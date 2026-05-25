@@ -1009,42 +1009,22 @@ func respondContentSearch(c *gin.Context, contents []models.Content, total int64
 // @Success      200 {object} utils.SwaggerResponse{data=object{list=[]models.Content,count=int}}
 // @Router       /content/recommend [get]
 func RecommendContent(c *gin.Context) {
-	countStr := c.Query("count")
-	if countStr == "" {
-		utils.RespondWithError(c, http.StatusBadRequest, "count参数必填")
+	count, start, end, ok := parseRecommendParams(c)
+	if !ok {
 		return
 	}
-
-	count, err := strconv.Atoi(countStr)
-	if err != nil || count < 1 {
-		utils.RespondWithError(c, http.StatusBadRequest, "count参数无效，必须是大于0的整数")
-		return
-	}
-
-	if count > MaxRecommendCount {
-		count = MaxRecommendCount
-	}
-
-	page := 1
-	if pageStr := c.Query("page"); pageStr != "" {
-		if p, err := strconv.Atoi(pageStr); err == nil && p > 0 {
-			page = p
-		}
-	}
-
-	start := int64((page - 1) * count)
-	end := start + int64(count) - 1
 
 	var contentIDs []string
 	var zsetAvailable bool
 	if utils.RedisClient != nil {
-		contentIDs, err = utils.ZRevRangeRecommend(start, end)
-		if err == nil && len(contentIDs) > 0 {
+		contentIDs, _ = utils.ZRevRangeRecommend(start, end)
+		if len(contentIDs) > 0 {
 			zsetAvailable = true
 		}
 	}
 
 	var result []models.Content
+	var err error
 	if !zsetAvailable {
 		result, err = getRecommendFromDB(start, count)
 	} else {
@@ -1061,13 +1041,34 @@ func RecommendContent(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"code":    200,
-		"message": "获取推荐成功",
-		"data": gin.H{
-			"list":  results,
-			"count": len(results),
-		},
+		"code": 200, "message": "获取推荐成功",
+		"data": gin.H{"list": results, "count": len(results)},
 	})
+}
+
+func parseRecommendParams(c *gin.Context) (count int, start, end int64, ok bool) {
+	countStr := c.Query("count")
+	if countStr == "" {
+		utils.RespondWithError(c, http.StatusBadRequest, "count参数必填")
+		return 0, 0, 0, false
+	}
+	count, err := strconv.Atoi(countStr)
+	if err != nil || count < 1 {
+		utils.RespondWithError(c, http.StatusBadRequest, "count参数无效，必须是大于0的整数")
+		return 0, 0, 0, false
+	}
+	if count > MaxRecommendCount {
+		count = MaxRecommendCount
+	}
+	page := 1
+	if pageStr := c.Query("page"); pageStr != "" {
+		if p, err := strconv.Atoi(pageStr); err == nil && p > 0 {
+			page = p
+		}
+	}
+	start = int64((page - 1) * count)
+	end = start + int64(count) - 1
+	return count, start, end, true
 }
 
 func getRecommendFromDB(start int64, count int) ([]models.Content, error) {
