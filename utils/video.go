@@ -43,7 +43,10 @@ func GenerateVideoThumbnail(videoPath, filename string) (string, error) {
 	if ffmpeg == "" {
 		ffmpeg = "ffmpeg"
 	}
-	cmd := exec.Command(ffmpeg, "-i", videoPath, "-vf", "select=eq(n\\,9)", "-vframes", "1", "-c:v", "libwebp", "-quality", "60", "-y", thumbPath)
+	// 宽图：居中，完整高度，横向4:3
+	// 高图：从距离顶部8%高度开始，裁剪完整宽度的4:3
+	vf := `select=eq(n\,9),crop=w='if(gte(in_w/in_h,4/3),in_h*4/3,in_w)':h='if(gte(in_w/in_h,4/3),in_h,in_w*3/4)':x='if(gte(in_w/in_h,4/3),(in_w-in_h*4/3)/2,0)':y='if(gte(in_w/in_h,4/3),0,min(in_h*0.08,in_h-in_w*3/4))'`
+	cmd := exec.Command(ffmpeg, "-i", videoPath, "-vf", vf, "-vframes", "1", "-c:v", "libwebp", "-quality", "60", "-y", thumbPath)
 	if err := cmd.Run(); err != nil {
 		return "", fmt.Errorf("failed to generate thumbnail: %v", err)
 	}
@@ -74,7 +77,10 @@ func GenerateImageThumbnail(originalPath, filename string) (string, error) {
 	if ffmpeg == "" {
 		ffmpeg = "ffmpeg"
 	}
-	cmd := exec.Command(ffmpeg, "-i", originalPath, "-vf", "scale=800:-1", "-q:v", "8", "-y", thumbPath)
+	// 宽图：居中，完整高度，横向4:3
+	// 高图：从距离顶部8%高度开始，裁剪完整宽度的4:3
+	vf := `crop=w='if(gte(in_w/in_h,4/3),in_h*4/3,in_w)':h='if(gte(in_w/in_h,4/3),in_h,in_w*3/4)':x='if(gte(in_w/in_h,4/3),(in_w-in_h*4/3)/2,0)':y='if(gte(in_w/in_h,4/3),0,min(in_h*0.08,in_h-in_w*3/4))',scale=800:-1`
+	cmd := exec.Command(ffmpeg, "-i", originalPath, "-vf", vf, "-q:v", "8", "-y", thumbPath)
 	if err := cmd.Run(); err != nil {
 		return "", fmt.Errorf("failed to generate image thumbnail: %v", err)
 	}
